@@ -13,7 +13,7 @@ The code is divided by responsibility:
 Each polygon is provided in two formats:
 
 - `geom_ewkt`: `SRID=4326;POLYGON(...)` text that PostGIS can read with `ST_GeomFromEWKT`.
-- `polygon_geojson`: a GeoJSON Polygon object for the JSONB columns described in `docs/data_structure.md`.
+- `polygon_geojson`: a GeoJSON Polygon object for the JSONB columns described in [the data structure](../architecture-and-design/data_structure.md).
 
 The generator uses UUIDv5 for stable identifiers, validates parameters and the bounding box, closes polygon rings, and rejects rings with zero area or self-intersections. Farms include an intersection indicator computed against the generated reserves, following the contact-or-overlap semantics of `ST_Intersects`.
 

@@ -25,8 +25,8 @@ Ensure you have the following tools installed on your system before starting:
 Clone the project and navigate to the root directory:
 
 ```powershell
-git clone [https://github.com/your-organization/agrosense-cafe.git](https://github.com/your-organization/agrosense-cafe.git)
-cd agrosense-cafe
+git clone https://github.com/Pbyte5/AgroSense-Caf-IoT-Monitoring-and-Traceability-Framework.git
+cd AgroSense-Caf-IoT-Monitoring-and-Traceability-Framework
 ```
 
 ---

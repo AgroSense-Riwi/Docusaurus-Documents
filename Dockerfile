@@ -6,7 +6,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN DOCUSAURUS_BASE_URL=/ npm run build
 
 FROM nginx:alpine AS runtime
 
