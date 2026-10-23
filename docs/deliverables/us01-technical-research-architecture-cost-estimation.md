@@ -150,7 +150,7 @@ statement.
 | RabbitMQ                       | Amazon EC2 (t3.small)                 | IoT telemetry buffer (F4, RF-01, RNF-01)                   | 1 t3.small instance, 20 GB EBS                |
 | Apache Airflow (Optimized)     | AWS ECS Fargate (1 task LocalExecutor)| Satellite weather ETL & alert orchestrator (RF-02, RNF-05) | 1 task (0.5 vCPU, 2GB RAM) / Scheduled RunTask|
 | Apache PySpark                 | AWS ECS Fargate (On-Demand)           | Batch ETL, rust/drought windows (RF-03, RN-03..RN-07)      | 1 task, 2 vCPU, 16 GB RAM (1 hr/day)          |
-| AWS Lambda                     | Serverless Compute                    | IoT message consumer writing raw JSON to S3 Bronze         | 4,000,000 requests/month (512 MB)             |
+| FastConsumer Worker (AGRO-16)  | AWS ECS Fargate (Co-located/Worker)   | IoT RabbitMQ consumer writing raw Parquet to S3 Medallion   | Ingestion tasks (0.5 vCPU, 1 GB RAM / co-located) |
 | Amazon S3                      | Data Lake & Backups                   | Bronze/Silver/Gold Parquet Data Lake & DB Backups          | 50 GB Data Lake + 30 GB Backups Standard      |
 | App Load Balancer              | AWS ALB                               | Public ingress, TLS termination & health checks            | 1 ALB, 3 Public IPv4s, 1 NAT Gateway          |
 | Amazon ECR                     | Private Container Registry            | Private Docker image repository with lifecycle policies    | 3 GB image storage (10 versions)              |
@@ -175,7 +175,7 @@ estimate was generated using the official AWS Pricing Calculator
 | Apache Airflow (Fargate Opt.) | 1 task (LocalExecutor, 0.5vCPU, 2GB)   | \$6.00                   | \$18.00                   | \$216.00        |
 | Apache PySpark (Fargate)      | 1 task/day, 1 hr, 16 GB RAM            | \$2.36                   | \$7.09                    | \$85.08         |
 | RabbitMQ (Amazon EC2)         | 1 t3.small instance, 20 GB EBS         | \$6.80                   | \$16.78                   | \$201.41        |
-| AWS Lambda                    | 4M invocations/mo, 512 MB RAM          | \$0.20                   | \$0.60                    | \$7.20          |
+| FastConsumer Worker (AGRO-16) | Co-located in API Fargate Task / 0.5 vCPU | Included in API          | Included in API           | $0.00           |
 | PostgreSQL + PostGIS (EC2)    | 1 t4g.small / t3.small, 30 GB gp3 EBS  | \$8.10                   | \$14.20                   | \$170.40        |
 | Data Lake (S3 Standard)       | 50 GB storage, 100k GET/PUTs           | \$0.85                   | \$1.69                    | \$20.28         |
 | S3 Database Backups           | 30 GB storage Standard                 | \$0.35                   | \$0.69                    | \$8.28          |
