@@ -334,7 +334,7 @@ These datasets reside in Amazon S3 partitioned by date (`year=YYYY/month=MM/day=
 
 ### Module 2.1: Bronze Layer (Raw Immutable Ingestion — JSON / CSV)
 
-#### 25. Dataset: `s3://.../bronze/iot_telemetry/` (Source F4 — JSON via RabbitMQ & Lambda)
+#### 25. Dataset: `s3://.../bronze/iot_telemetry/` (Source F4 — JSON/Parquet via RabbitMQ & ECS FastConsumer Worker)
 
 * **Columns:** `message_id` (STRING), `batch_upload_id` (STRING), `sensor_id` (STRING), `farm_id` (STRING), `device_timestamp_raw` (STRING), `server_ingestion_ts` (TIMESTAMP), `sensor_type` (STRING), `raw_value` (DOUBLE), `raw_unit` (STRING), `battery_pct` (DOUBLE).
 
