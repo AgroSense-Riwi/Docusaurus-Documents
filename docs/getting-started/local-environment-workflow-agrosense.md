@@ -69,7 +69,7 @@ conditions during database schema initialization:
     and simulated IoT data idempotently (CT-06).
 
 4.  **Stage 4: Application & Orchestration Services:** FastAPI (web
-    API), Airflow Webserver/Scheduler (Celery executor), and IoT
+    API), Airflow Webserver/Scheduler (LocalExecutor - Airflow 3), and IoT
     Simulators start once database schema and seed data are verified.
 
 ## 3. Local Stack Teardown & Volume Management

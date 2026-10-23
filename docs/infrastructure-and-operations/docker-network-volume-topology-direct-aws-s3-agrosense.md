@@ -63,9 +63,6 @@ and execution logs:
 - **airflow_logs_data (/opt/airflow/logs):** Preserves Airflow DAG run
   logs and ETL task execution histories for local debugging.
 
-- **redis_data (/data):** Maintains Celery task broker cache for Airflow
-  background workers.
-
 # 4. Declarative Docker Compose Configuration (Direct AWS S3)
 
 ```yaml
@@ -85,8 +82,6 @@ volumes:
   iot_telemetry_queue_data:
     driver: local
   airflow_logs_data:
-    driver: local
-  redis_data:
     driver: local
 
 services:
