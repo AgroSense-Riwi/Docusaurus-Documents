@@ -68,9 +68,9 @@ secure API consumption.
   RabbitMQ on EC2 to buffer incoming block uploads during intermittent
   cellular connectivity (RNF-01).
 - **Layer 2 — Agro-Climatic & Satellite Orchestration:** Apache Airflow
-  (Celery executor on ECS Fargate) executes daily DAGs at 02:00 AM to
+  (Optimized LocalExecutor on ECS Fargate / Standalone container) executes daily DAGs at 02:00 AM to
   pull satellite weather metrics from NASA POWER (F2) and forecasts from
-  Open-Meteo (F3) with caching and rate limit retries (RNF-05).
+  Open-Meteo (F3) with caching and rate limit retries (RNF-05), eliminating Celery/Redis overhead.
 - **Layer 3 — Distributed Computing & Agronomic Rules:** PySpark on ECS
   Fargate Serverless executes distributed batch jobs evaluating 4-day
   rust windows (RN-03), 5-day drought windows (RN-04), 72-hour rainfall
@@ -147,8 +147,8 @@ statement.
 | :----------------------------- | :------------------------------------ | :--------------------------------------------------------- | :-------------------------------------------- |
 | FastAPI                        | AWS ECS Fargate (x86)                 | Commercial Traceability REST API (RF-06, RN-11, RNF-03)    | 2 tasks, 0.5 vCPU, 1 GB RAM 24/7              |
 | PostgreSQL + PostGIS           | Amazon RDS PostgreSQL                 | Operational DB, farms, polygons, lots (F5, RN-08, RN-09)   | db.t4g.small, 30 GB gp3, Single-AZ            |
-| RabbitMQ                       | Amazon EC2 (t3.small)                 | IoT telemetry buffer & Celery broker (F4, RF-01, RNF-01)   | 1 t3.small instance, 20 GB EBS                |
-| Apache Airflow                 | AWS ECS Fargate (3 tasks)             | Satellite weather ETL & alert orchestrator (RF-02, RNF-05) | 1 scheduler, 1 webserver, 2 workers (2GB RAM) |
+| RabbitMQ                       | Amazon EC2 (t3.small)                 | IoT telemetry buffer (F4, RF-01, RNF-01)                   | 1 t3.small instance, 20 GB EBS                |
+| Apache Airflow (Optimized)     | AWS ECS Fargate (1 task LocalExecutor)| Satellite weather ETL & alert orchestrator (RF-02, RNF-05) | 1 task (0.5 vCPU, 2GB RAM) / Scheduled RunTask|
 | Apache PySpark                 | AWS ECS Fargate (On-Demand)           | Batch ETL, rust/drought windows (RF-03, RN-03..RN-07)      | 1 task, 2 vCPU, 16 GB RAM (1 hr/day)          |
 | AWS Lambda                     | Serverless Compute                    | IoT message consumer writing raw JSON to S3 Bronze         | 4,000,000 requests/month (512 MB)             |
 | Amazon S3                      | Data Lake & Backups                   | Bronze/Silver/Gold Parquet Data Lake & DB Backups          | 50 GB Data Lake + 30 GB Backups Standard      |
@@ -172,7 +172,7 @@ estimate was generated using the official AWS Pricing Calculator
 | NAT Gateway                   | 1 Regional NAT Gateway (us-east-1)     | \$11.25                  | \$33.75                   | \$405.00        |
 | Application Load Balancer     | 1 ALB with LCU processing              | \$8.00                   | \$16.66                   | \$199.92        |
 | FastAPI (AWS Fargate)         | 2 tasks, 1 GB RAM, 20 GB storage       | \$12.01                  | \$36.04                   | \$432.48        |
-| Apache Airflow (Fargate)      | 3 tasks, 2 GB RAM, 20 GB storage       | \$36.04                  | \$108.12                  | \$1,297.44      |
+| Apache Airflow (Fargate Opt.) | 1 task (LocalExecutor, 0.5vCPU, 2GB)   | \$6.00                   | \$18.00                   | \$216.00        |
 | Apache PySpark (Fargate)      | 1 task/day, 1 hr, 16 GB RAM            | \$2.36                   | \$7.09                    | \$85.08         |
 | RabbitMQ (Amazon EC2)         | 1 t3.small instance, 20 GB EBS         | \$6.80                   | \$16.78                   | \$201.41        |
 | AWS Lambda                    | 4M invocations/mo, 512 MB RAM          | \$0.20                   | \$0.60                    | \$7.20          |
@@ -182,7 +182,7 @@ estimate was generated using the official AWS Pricing Calculator
 | Amazon ECR                    | 3 GB image storage                     | \$0.30                   | \$0.30                    | \$3.60          |
 | Amazon CloudWatch             | 5 GB logs, 10 metric alarms            | \$2.00                   | \$3.52                    | \$42.27         |
 | AWS Secrets Manager           | 6 secrets, 10k API requests            | \$2.45                   | \$2.45                    | \$29.40         |
-| \# TOTAL MONTHLY ESTIMATE\*\* | **Full Production Architecture** | **\$101.46**       | **\$265.45**        | \*\*\$3,185.40  |
+| \# TOTAL MONTHLY ESTIMATE\*\* | **Optimized Production Architecture**  | **\$71.42**              | **\$175.33**              | \*\*\$2,103.96  |
 
 ## 4.1 Minimum Viable Cost Scenario (~\$35.00 USD/month) — Deliverable E-15
 
