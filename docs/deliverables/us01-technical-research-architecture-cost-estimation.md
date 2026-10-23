@@ -109,13 +109,13 @@ Database Backups).*
 
 ## Architectural Decision Records (ADRs)
 
-### ADR-001: Operational Database Selection — PostgreSQL with PostGIS on Amazon RDS
+### ADR-001: Operational Database Selection — PostgreSQL with PostGIS on Amazon EC2 (Tutor Cost-Optimization Recommendation)
 
-| Context & Need          | Manage 1,300 farms, ~15k harvest deliveries, farm polygons, and export lot compositions while enforcing spatial forest reserve overlap queries (RN-09) and 100% lot traceability (RN-08). |
+| Context & Need          | Manage 1,300 farms, ~15k harvest deliveries, farm polygons, and export lot compositions while enforcing spatial forest reserve overlap queries (RN-09) and 100% lot traceability (RN-08) under strict cooperative budget constraints (RNF-04). |
 | :---------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Decision Adopted        | PostgreSQL with PostGIS extension deployed on Amazon RDS (db.t4g.small, Single-AZ in Dev / Multi-AZ evaluated for Prod).                                                                  |
-| Alternatives Rejected   | 1\) MySQL/MariaDB: Inferior PostGIS spatial functions. 2) DynamoDB: No native joins, spatial queries, or foreign key constraints. 3) TimescaleDB: Requires self-managed EC2.              |
-| Consequences & Benefits | Native ST_Intersects and GiST spatial indexing for RN-09. ACID compliance, foreign keys, and idempotent UPSERT support (CT-06).                                                           |
+| Decision Adopted        | PostgreSQL 16 with PostGIS extension deployed on Amazon EC2 (t4g.small / t3.small with 30 GB gp3 EBS). Recommended by technical mentorship to cut managed cloud premiums by ~50% while maintaining native NVMe/EBS IOPS performance. |
+| Alternatives Rejected   | 1\) Amazon RDS: Excessive managed fee surcharge (~$27/mo vs ~$14/mo) without necessity for small-scale pilot. 2) MySQL/MariaDB: Inferior spatial functions. 3) DynamoDB: No native joins or foreign keys. |
+| Consequences & Benefits | Native ST_Intersects and GiST spatial indexing for RN-09. Direct root control over postgresql.conf tuning (shared_buffers, work_mem) and scheduled pg_dump backups directly to S3.       |
 | Validation Criteria     | Automated spatial tests pass (CA-08); p95 traceability query response ≤ 500 ms (RNF-03).                                                                                                 |
 
 ### ADR-002: Traceability REST API Framework — FastAPI + Pydantic + SQLAlchemy
@@ -146,7 +146,7 @@ statement.
 | **Service / Technology** | **AWS / Open Source Component** | **Project Role & Business Rule**                     | **Initial Sizing Assumption**           |
 | :----------------------------- | :------------------------------------ | :--------------------------------------------------------- | :-------------------------------------------- |
 | FastAPI                        | AWS ECS Fargate (x86)                 | Commercial Traceability REST API (RF-06, RN-11, RNF-03)    | 2 tasks, 0.5 vCPU, 1 GB RAM 24/7              |
-| PostgreSQL + PostGIS           | Amazon RDS PostgreSQL                 | Operational DB, farms, polygons, lots (F5, RN-08, RN-09)   | db.t4g.small, 30 GB gp3, Single-AZ            |
+| PostgreSQL + PostGIS           | Amazon EC2 (t4g.small / t3.small)     | Operational DB, farms, polygons, lots (F5, RN-08, RN-09)   | 1 EC2 instance, 30 GB gp3 EBS (Tutor Optimized)|
 | RabbitMQ                       | Amazon EC2 (t3.small)                 | IoT telemetry buffer (F4, RF-01, RNF-01)                   | 1 t3.small instance, 20 GB EBS                |
 | Apache Airflow (Optimized)     | AWS ECS Fargate (1 task LocalExecutor)| Satellite weather ETL & alert orchestrator (RF-02, RNF-05) | 1 task (0.5 vCPU, 2GB RAM) / Scheduled RunTask|
 | Apache PySpark                 | AWS ECS Fargate (On-Demand)           | Batch ETL, rust/drought windows (RF-03, RN-03..RN-07)      | 1 task, 2 vCPU, 16 GB RAM (1 hr/day)          |
@@ -157,7 +157,7 @@ statement.
 | Amazon CloudWatch              | Observability & Alarms                | Logs, metrics, queue depth & ALB 5xx alarms                | 5 GB ingested logs, 10 metric alarms          |
 | Secrets Manager                | Security & Identity                   | Database credentials & API keys management (CT-02)         | 6 secrets, 10,000 API calls/month             |
 | NAT Gateway                    | AWS VPC Networking                    | Outbound internet access for satellite APIs (F2, F3)       | 1 regional NAT Gateway (us-east-1)            |
-| Power BI                       | External Analytics                    | Executive dashboards for agronomic health & sustainability | Direct connection to RDS / Gold S3            |
+| Power BI                       | External Analytics                    | Executive dashboards for agronomic health & sustainability | Direct connection to EC2 DB / Gold S3         |
 
 # 4. AC-03: Infrastructure Cost Estimation & Financial Evaluation
 
@@ -176,13 +176,13 @@ estimate was generated using the official AWS Pricing Calculator
 | Apache PySpark (Fargate)      | 1 task/day, 1 hr, 16 GB RAM            | \$2.36                   | \$7.09                    | \$85.08         |
 | RabbitMQ (Amazon EC2)         | 1 t3.small instance, 20 GB EBS         | \$6.80                   | \$16.78                   | \$201.41        |
 | AWS Lambda                    | 4M invocations/mo, 512 MB RAM          | \$0.20                   | \$0.60                    | \$7.20          |
-| Amazon RDS PostgreSQL         | db.t4g.small, 30 GB gp3 SSD            | \$15.20                  | \$26.81                   | \$321.72        |
+| PostgreSQL + PostGIS (EC2)    | 1 t4g.small / t3.small, 30 GB gp3 EBS  | \$8.10                   | \$14.20                   | \$170.40        |
 | Data Lake (S3 Standard)       | 50 GB storage, 100k GET/PUTs           | \$0.85                   | \$1.69                    | \$20.28         |
 | S3 Database Backups           | 30 GB storage Standard                 | \$0.35                   | \$0.69                    | \$8.28          |
 | Amazon ECR                    | 3 GB image storage                     | \$0.30                   | \$0.30                    | \$3.60          |
 | Amazon CloudWatch             | 5 GB logs, 10 metric alarms            | \$2.00                   | \$3.52                    | \$42.27         |
 | AWS Secrets Manager           | 6 secrets, 10k API requests            | \$2.45                   | \$2.45                    | \$29.40         |
-| \# TOTAL MONTHLY ESTIMATE\*\* | **Optimized Production Architecture**  | **\$71.42**              | **\$175.33**              | \*\*\$2,103.96  |
+| \# TOTAL MONTHLY ESTIMATE\*\* | **Tutor-Optimized Architecture**       | **\$64.32**              | **\$162.72**              | \*\*\$1,952.64  |
 
 ## 4.1 Minimum Viable Cost Scenario (~\$35.00 USD/month) — Deliverable E-15
 
