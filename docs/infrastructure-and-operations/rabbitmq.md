@@ -51,7 +51,13 @@ agrosense-cafe/
 
 ### 3.2 Initial Queue Topology (`docker/rabbitmq/definitions.json`)
 
-When the container starts, RabbitMQ automatically imports the following queues and exchanges in the `/agrosense` virtual host:
+The following queues and exchanges make up the topology of the `/agrosense` virtual host.
+
+> **Updated by [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (pending merge, not yet in `dev`):** `definitions.json` is **not** imported when the broker starts. When definitions are configured to load at boot, RabbitMQ skips creating the default user and vhost from `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` / `RABBITMQ_DEFAULT_VHOST`, and the broker would be left without credentials. Instead, the API and the telemetry consumer declare this same topology idempotently every time they connect (see [§3.3](#33-telemetry-flow-implemented-in-the-api-api-pr-20)). In the API repository the files live in `infra/docker/rabbitmq/`, and `definitions.json` there has the `vhosts`, `exchanges`, `queues` and `bindings` shown below but no `permissions` block. It can still be imported manually:
+>
+> ```bash
+> docker compose exec broker rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+> ```
 
 | Resource                  | Type                | Name                        | Purpose in AgroSense Café                                                                       |
 | :------------------------ | :------------------ | :-------------------------- | :---------------------------------------------------------------------------------------------- |
@@ -67,7 +73,10 @@ When the container starts, RabbitMQ automatically imports the following queues a
 loopback_users.guest = false
 listeners.tcp.default = 5672
 management.tcp.port = 15672
-management.load_definitions = /etc/rabbitmq/definitions.json
+## definitions.json is NOT imported at startup (API PR #20): the API and the
+## FastConsumer declare the topology idempotently. Optional manual import:
+##   docker compose exec broker rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+## management.load_definitions = /etc/rabbitmq/definitions.json
 ## Safe memory limit for local development
 vm_memory_high_watermark.relative = 0.6
 ```
@@ -166,6 +175,32 @@ vm_memory_high_watermark.relative = 0.6
   ]
 }
 ```
+
+### 3.3 Telemetry Flow Implemented in the API (API PR #20)
+
+> **Status:** implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **pending merge — not yet in `dev`**. Before this PR, the API published to a queue named `agrosense.telemetry` that is not part of the topology above.
+
+**Connection.** The API, the consumer and the simulators connect with `AGROSENSE_RABBITMQ_URL`, which points to the `/agrosense` vhost (URL-encoded as `%2Fagrosense`), e.g. `amqp://agrosense_mq:<password>@broker:5672/%2Fagrosense`. In Docker Compose the broker creates that vhost from `RABBITMQ_DEFAULT_VHOST=/agrosense`. A broker whose data volume already exists does not create it again; in that case run `rabbitmqctl add_vhost /agrosense` and grant the user permissions on it.
+
+**Publishing (`POST /api/v1/telemetry`).** Restricted to the `ADMIN` and `AGRONOMIST` roles. The API:
+
+1. Declares the topology idempotently (same arguments as `definitions.json`).
+2. Publishes to exchange **`agrosense.ingest.exchange`** with routing key **`telemetry.block.<farm_id>`**, which matches the binding `telemetry.block.#` of `telemetry.raw.queue`.
+3. Uses publisher confirms, `mandatory=True` (an unroutable message is not silently lost) and persistent delivery; the message body is the reading plus its `event_id`, which is also the AMQP `message_id`.
+4. Returns `202 Accepted` with `{ "event_id": "...", "status": "queued" }`, or `503` if the broker is not configured or not reachable.
+
+**Consumer (`python -m agrosense_api.workers.telemetry_consumer`).** It consumes `telemetry.raw.queue`:
+
+- **Manual ACK** (`no_ack=False`) with prefetch `AGROSENSE_TELEMETRY_CONSUMER_PREFETCH` (default `50`). A message is acknowledged only after it has been processed (**RNF-01**).
+- Each message is validated, deduplicated (bounded in-memory idempotency registry) and ordered chronologically per `sensor_id`. It accepts a single reading, a list, or an object with a `readings` list.
+- A completely invalid message (or an unexpected processing error) is rejected with `requeue=False`, so the broker routes it through the queue's DLX (`agrosense.dlx.exchange`, routing key `dlq.telemetry`) to `dead.letter.queue`. In a partially valid block, the invalid readings are published explicitly to the DLX before the message is acknowledged.
+- If the broker is not reachable at startup, it retries with backoff (1, 2, 5, 10, 30 s) instead of exiting, and stops cleanly on `SIGTERM`/`SIGINT`.
+- **It does not persist readings yet:** accepted readings are only logged (debug level). In PR #20 the consumer writes nothing to PostgreSQL or S3.
+
+**Where the consumer runs.**
+
+- **Docker Compose:** service `telemetry-consumer` (container `agrosense_telemetry_consumer`), same image as the API (`agrosense-api:local`), command `python -m agrosense_api.workers.telemetry_consumer`, `SKIP_MIGRATIONS=true`, depends on a healthy `broker`, private network only.
+- **AWS ECS:** second container `agrosense-telemetry-consumer` in the API task definition (`infra/aws/ecs/task-definition-api.json`), same image as the API, `essential: false`, started after the `agrosense-api` container (`dependsOn` with condition `START`), with `AGROSENSE_RABBITMQ_URL` from the secret `agrosense/prod/rabbitmq-url` and logs in `/ecs/agrosense-api` with stream prefix `telemetry-consumer`. RabbitMQ itself is still not deployed in AWS (see [Current Project Status](../getting-started/current-status.md)).
 
 ---
 
