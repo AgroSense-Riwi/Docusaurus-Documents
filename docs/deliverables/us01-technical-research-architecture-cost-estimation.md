@@ -46,7 +46,7 @@ program topics.
   FastAPI, and Docker on ECS Fargate.
 - **AC-02 (Services Stack):** Full inventory and technical justification
   documented for all 13 core services (FastAPI, PostgreSQL, RabbitMQ,
-  Airflow, PySpark, AWS ECS/Fargate, RDS, S3 Data Lake, S3 Backups, ALB,
+  Airflow, PySpark, AWS ECS/Fargate, EC2 (PostgreSQL + PostGIS), S3 Data Lake, S3 Backups, ALB,
   ECR, CloudWatch, Secrets Manager).
 - **AC-03 (Cost Estimation):** Detailed line-item AWS Pricing Calculator
   cost estimate generated (\$265.45 USD/month Prod vs \$48.00 USD/month
@@ -95,7 +95,7 @@ BI Consumption.*
 
 **Physical AWS Infrastructure Topology:** The physical deployment in AWS
 is hosted within a Virtual Private Cloud (VPC) spanning 2 Availability
-Zones (AZs) in us-east-1, isolating public ingress from backend data
+Zones (AZs) in the us-east-2 (Ohio) region, isolating public ingress from backend data
 stores.
 
 ### Figure 2: AWS VPC Physical Infrastructure Diagram
@@ -103,9 +103,9 @@ stores.
 ![1791376815253](image/1791376815253.png)
 
 *Figure 2 — AWS VPC Network Topology: Public Subnet (ALB, NAT Gateway),
-Private Subnet APPS (ECS Fargate FastAPI, Airflow, PySpark, RabbitMQ
-EC2), Private Subnet DATA (PostgreSQL RDS), and S3 Buckets (Data Lake &
-Database Backups).*
+Private Subnet APPS (ECS Fargate FastAPI, FastConsumer Worker, Airflow,
+PySpark), Private Subnet DATA (RabbitMQ on EC2, PostgreSQL + PostGIS on
+EC2), and S3 Buckets (Data Lake & Database Backups).*
 
 ## Architectural Decision Records (ADRs)
 
@@ -156,7 +156,7 @@ statement.
 | Amazon ECR                     | Private Container Registry            | Private Docker image repository with lifecycle policies    | 3 GB image storage (10 versions)              |
 | Amazon CloudWatch              | Observability & Alarms                | Logs, metrics, queue depth & ALB 5xx alarms                | 5 GB ingested logs, 10 metric alarms          |
 | Secrets Manager                | Security & Identity                   | Database credentials & API keys management (CT-02)         | 6 secrets, 10,000 API calls/month             |
-| NAT Gateway                    | AWS VPC Networking                    | Outbound internet access for satellite APIs (F2, F3)       | 1 regional NAT Gateway (us-east-1)            |
+| NAT Gateway                    | AWS VPC Networking                    | Outbound internet access for satellite APIs (F2, F3)       | 1 regional NAT Gateway (us-east-2)            |
 | Power BI                       | External Analytics                    | Executive dashboards for agronomic health & sustainability | Direct connection to EC2 DB / Gold S3         |
 
 # 4. AC-03: Infrastructure Cost Estimation & Financial Evaluation
@@ -169,7 +169,7 @@ estimate was generated using the official AWS Pricing Calculator
 | \# AWS Service Line\*\*       | **Configuration Summary**        | **Dev Cost (USD)** | **Prod Cost (USD)** | \*\*12-Mo Total |
 | :---------------------------- | :------------------------------------- | :----------------------- | :------------------------ | :-------------- |
 | Public IPv4 Addresses         | 3 Public IPv4 addresses in use         | \$3.65                   | \$10.95                   | \$131.40        |
-| NAT Gateway                   | 1 Regional NAT Gateway (us-east-1)     | \$11.25                  | \$33.75                   | \$405.00        |
+| NAT Gateway                   | 1 Regional NAT Gateway (us-east-2)     | \$11.25                  | \$33.75                   | \$405.00        |
 | Application Load Balancer     | 1 ALB with LCU processing              | \$8.00                   | \$16.66                   | \$199.92        |
 | FastAPI (AWS Fargate)         | 2 tasks, 1 GB RAM, 20 GB storage       | \$12.01                  | \$36.04                   | \$432.48        |
 | Apache Airflow (Fargate Opt.) | 1 task (LocalExecutor, 0.5vCPU, 2GB)   | \$6.00                   | \$18.00                   | \$216.00        |
@@ -199,7 +199,7 @@ specific cost-saving levers:
   provision upon DAG execution and destroy immediately upon completion
   (15 min/day duration).
 - **3. ARM Graviton2 Instances:** Adoption of Graviton2 ARM instances
-  (db.t4g.small) providing a 20% price-performance gain over x86.
+  (EC2 t4g.small for PostgreSQL + PostGIS) providing a 20% price-performance gain over x86.
 - **4. 100% Local Containerized Environment:** Consolidating local
   development onto Docker Compose, generating \$0.00 cloud cost during
   development phases.
@@ -214,7 +214,7 @@ and Sprint 2, fully estimated in Story Points and assigned in Jira.
 | :-------------- | :--------------------------------------------------------- | :-------------------------------- | :----- | :----------- |
 | AGRO-01         | End-to-End Logical Architecture & Base ADRs Registration   | Architecture & ADRs (E-01)        | 4      | LL           |
 | AGRO-02         | Git Repository Setup, Code Standards & Onboarding Protocol | Governance & CI/CD (E-02)         | 1      | LL           |
-| AGRO-03A        | Relational Data Model Design & PostGIS Schema Definition   | PostgreSQL RDS / PostGIS (E-01)   | 4      | S            |
+| AGRO-03A        | Relational Data Model Design & PostGIS Schema Definition   | PostgreSQL on EC2 / PostGIS (E-01)| 4      | S            |
 | AGRO-04A        | Data Seed Strategy, Defect Profiling & Synthetic Blueprint | Seed Data Generator (E-03)        | 3      | KM           |
 | AGRO-05A        | Multi-Container Local Environment Architecture & Compose   | Docker Compose Stack (E-04)       | 2      | KM           |
 | AGRO-05B        | Multi-Container Local Environment Integration Testing      | Local Stack / Healthchecks (E-04) | 3      | KM           |

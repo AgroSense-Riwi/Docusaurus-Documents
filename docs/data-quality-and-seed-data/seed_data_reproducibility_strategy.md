@@ -7,7 +7,8 @@ Topological Ingestion Order
 
 The AgroSense Café seed generation engine guarantees 100% deterministic,
 reproducible, and idempotent dataset population across local development
-(Docker Compose) and AWS cloud environments (RDS PostgreSQL). Running
+(Docker Compose) and AWS cloud environments (PostgreSQL + PostGIS on
+Amazon EC2, us-east-2). Running
 the seeding process once, twice, or multiple times with identical
 configuration parameters produces exact state convergence without
 primary key collisions, foreign key violations, or duplicate records

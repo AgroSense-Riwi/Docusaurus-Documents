@@ -115,7 +115,7 @@ services:
       - RABBITMQ_HOST=broker
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-2}
       - S3_DATALAKE_BUCKET=agrosense-datalake-prod
     networks:
       - agrosense_public_subnet

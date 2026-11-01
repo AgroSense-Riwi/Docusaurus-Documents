@@ -92,7 +92,7 @@ After running the script once, twice, or $N$ times, the database must converge t
 
 ## 4. Standard CLI Execution Commands
 
-The seed module is exposed as a reproducible CLI entry point compatible with both local Docker Compose and AWS RDS environments:
+The seed module is exposed as a reproducible CLI entry point compatible with both local Docker Compose and the AWS PostgreSQL + PostGIS instance on EC2:
 
 ```bash
 # 1. Standard idempotent execution (Full production volume, safe re-run via UPSERT)

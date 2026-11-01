@@ -87,7 +87,7 @@ Required connection parameters injected via environment variables:
 
 | Environment Variable    | Type       | Example (Local Docker)                | Description                                                    |
 | :---------------------- | :--------- | :------------------------------------ | :------------------------------------------------------------- |
-| `POSTGRES_HOST`       | `STRING` | `postgres-db` / `localhost`       | Database hostname or AWS RDS endpoint.                         |
+| `POSTGRES_HOST`       | `STRING` | `postgres-db` / `localhost`       | Database hostname or private address of the EC2 PostgreSQL host. |
 | `POSTGRES_PORT`       | `INT`    | `5432`                              | PostgreSQL port.                                               |
 | `POSTGRES_DB`         | `STRING` | `agrosense_db`                      | Target operational database name.                              |
 | `POSTGRES_USER`       | `STRING` | `agrosense_user`                    | Database username with write privileges.                       |

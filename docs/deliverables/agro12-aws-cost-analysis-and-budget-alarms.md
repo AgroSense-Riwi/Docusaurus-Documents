@@ -34,14 +34,16 @@ The table below contrasts the **Production (24/7 On-Demand)** estimate from AWS 
 | 5 | **Apache Airflow (ECS Fargate)** | 3 tasks, 2 GB RAM, 20 GB ephemeral | 2 tasks (Scheduler+Web), Fargate Spot (220h) | $14.20 | $108.12 | $1,297.44 |
 | 6 | **Apache PySpark (ECS Fargate)** | 1 task/day, 1 hr, 2 vCPU, 16 GB RAM | On-demand test runs (15 min/day, Fargate Spot) | $0.85 | $7.09 | $85.08 |
 | 7 | **RabbitMQ Broker** | 1 `t3.small` EC2 / Fargate (24/7, 20 GB) | 1 `t4g.micro` / Fargate Spot (Scheduled 220h) | $3.40 | $16.78 | $201.41 |
-| 8 | **AWS Lambda (Ingestion)** | 4M invocations/mo, 512 MB RAM | 500k invocations/mo (Free Tier covered) | $0.00 | $0.60 | $7.20 |
-| 9 | **PostgreSQL + PostGIS (RDS/EFS)** | `db.t4g.small`, 30 GB `gp3` SSD (24/7) | `db.t4g.micro` / EFS Container (Scheduled 220h) | $9.80 | $26.81 | $321.72 |
+| 8 | **FastConsumer Worker (AGRO-16)** | Co-located in the API Fargate task (0.5 vCPU) | Co-located in the API Fargate task | Included in API | Included in API | $0.00 |
+| 9 | **PostgreSQL + PostGIS (Amazon EC2, ADR-001)** | 1 `t4g.small` / `t3.small`, 30 GB `gp3` EBS (24/7) | 1 `t4g.small` / `t3.small` (Scheduled) | $8.10 | $14.20 | $170.40 |
 | 10 | **S3 Data Lake (Medallion)** | 50 GB Standard (`raw`, `trusted`, `refined`) | 15 GB Standard + Intelligent-Tiering | $0.45 | $1.69 | $20.28 |
 | 11 | **S3 Database Backups** | 30 GB Standard + Glacier transition | 10 GB Standard backups | $0.25 | $0.69 | $8.28 |
 | 12 | **Amazon ECR** | 3 GB private container images | Shared repository with lifecycle policy (keep 5) | $0.30 | $0.30 | $3.60 |
 | 13 | **Amazon CloudWatch** | 5 GB logs, 10 metric alarms | 2 GB logs (7-day retention), 3 alarms | $1.65 | $3.52 | $42.27 |
 | 14 | **AWS Secrets Manager** | 6 secrets, 10k API calls/month | 6 shared secrets | $2.45 | $2.45 | $29.40 |
 | — | **TOTAL MONTHLY ESTIMATE** | **Full Production (24/7 High Availability)** | **Scheduled Dev Environment (~70% Compute Off)** | **$48.00** | **$265.45** | **$3,185.40** |
+
+> **Note (infrastructure alignment):** Rows 8 and 9 reflect the deployed architecture in `us-east-2` (Ohio): PostgreSQL 16 + PostGIS on Amazon EC2 (ADR-001, Amazon RDS rejected) and IoT ingestion through the FastConsumer Worker co-located in the API Fargate task (no AWS Lambda). Row 9 uses the EC2 PostgreSQL figures already stated in ADR-001 / US-01. The headline totals (Dev $48.00 / Prod $265.45) and the Reserved Instance baseline in Section 3.1 still come from the original AWS Pricing Calculator estimate, which priced Amazon RDS (`db.t4g.small`, $26.81/mo Prod) and AWS Lambda ($0.60/mo Prod); they have not been recalculated and should be read as an upper bound until a refreshed Pricing Calculator export is produced.
 
 ---
 
@@ -53,9 +55,9 @@ To further optimize long-term expenditure for the coffee cooperative once the 30
 
 | Optimization Mechanism | Target Services | Baseline On-Demand (USD/mo) | Discount Rate | Optimized Cost (USD/mo) | Monthly Savings | Trade-Off & Architectural Justification |
 | :--- | :--- | ---: | :---: | ---: | ---: | :--- |
-| **1-Year Compute Savings Plan (No Upfront)** | ECS Fargate (`FastAPI` + `Airflow` 24/7 baseline) | $144.16 | **~28%** | $103.80 | **-$40.36** | Applies automatically across ECS Fargate and Lambda regardless of region or OS/CPU architecture (`x86` or `ARM64`). Ideal for the steady 24/7 API and Airflow Scheduler baseline. |
+| **1-Year Compute Savings Plan (No Upfront)** | ECS Fargate (`FastAPI` + `Airflow` 24/7 baseline) | $144.16 | **~28%** | $103.80 | **-$40.36** | Applies automatically to ECS Fargate usage regardless of region or OS/CPU architecture (`x86` or `ARM64`). Ideal for the steady 24/7 API and Airflow Scheduler baseline. |
 | **Fargate Spot Capacity Provider** | ECS Fargate (`PySpark` Batch Jobs + `Airflow` Workers) | $43.13 | **~68%** | $13.80 | **-$29.33** | PySpark windowing jobs (`RN-03..RN-07`) and Airflow Celery workers are stateless and idempotent (`CT-06`), making them 100% fault-tolerant to 2-minute Spot interruption notices. |
-| **1-Year RDS & EC2 Reserved Instances (`t4g`/`t3`)** | PostgreSQL (`db.t4g.small`) + RabbitMQ (`t3.small`) | $43.59 | **~34%** | $28.77 | **-$14.82** | Locks in database and broker instance families for 12 months. Recommended only after completing Month 3 of production telemetry sizing. |
+| **1-Year EC2 Reserved Instances (`t4g`/`t3`)** | PostgreSQL + PostGIS on EC2 (`t4g.small`) + RabbitMQ (`t3.small`) | $43.59 | **~34%** | $28.77 | **-$14.82** | Locks in database and broker instance families for 12 months. Recommended only after completing Month 3 of production telemetry sizing. |
 | **S3 Lifecycle Transition to Glacier Instant Retrieval** | S3 Data Lake (`raw/` Bronze & `S3 Backups`) | $2.38 | **~65%** | $0.83 | **-$1.55** | Raw JSON telemetry payloads (`s3://agrosense-raw/`) are compacted into Parquet in `trusted/` within 24h; transitioning `raw/` objects older than 30 days to **S3 Glacier Instant Retrieval** cuts storage cost from $0.023/GB to $0.004/GB. |
 | **Combined FinOps Optimized Production** | **All Production Services** | **$265.45** | **~32.4%** | **$179.39** | **-$86.06/mo** | Reduces annual cooperative cloud spend from **$3,185.40/yr** to **$2,152.68/yr** ($1,032.72 annual savings) without sacrificing SLA (`RNF-03`). |
 
