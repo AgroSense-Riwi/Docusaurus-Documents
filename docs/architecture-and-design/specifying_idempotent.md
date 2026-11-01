@@ -96,14 +96,14 @@ The seed module is exposed as a reproducible CLI entry point compatible with bot
 
 ```bash
 # 1. Standard idempotent execution (Full production volume, safe re-run via UPSERT)
-uv run python -m scripts.seed --mode prod --seed 42
+python -m seed --mode prod --seed 42
 
 # 2. Lightweight development execution (Fast local startup < 30 min for CT-01)
-uv run python -m scripts.seed --mode dev --seed 42
+python -m seed --mode dev --seed 42
 
 # 3. Full cleanup and reset from scratch (TRUNCATE CASCADE + RESTART IDENTITY)
-uv run python -m scripts.seed --mode prod --seed 42 --reset
+python -m seed --mode prod --seed 42 --reset
 
 # 4. Custom data quality defect injection rate (Section 5.3 testing)
-uv run python -m scripts.seed --mode dev --seed 42 --defect-rate 0.10 --reset
+python -m seed --mode dev --seed 42 --defect-rate 0.10 --reset
 ```

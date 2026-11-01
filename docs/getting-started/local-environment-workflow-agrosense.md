@@ -64,8 +64,8 @@ conditions during database schema initialization:
     Upstream services wait until health status reaches 'healthy'.
 
 3.  **Stage 3: Database Migrations & Seed Trigger:** An ephemeral init
-    container executes Alembic database migrations followed by python
-    scripts/seed/run_seed.py --mode dev --seed 42, populating 50 farms
+    container executes Alembic database migrations followed by
+    `python -m seed --mode dev --seed 42`, populating 130 farms
     and simulated IoT data idempotently (CT-06).
 
 4.  **Stage 4: Application & Orchestration Services:** FastAPI (web
@@ -140,8 +140,8 @@ minutes following this checklist:
   at http://localhost:8000/docs; Airflow UI accessible at
   http://localhost:8080.
 
-- **Seed Verification Query:** Executed 'SELECT COUNT(\*) FROM finca;'
-  returning exactly 50 records in development mode (CT-06).
+- **Seed Verification Query:** Executed 'SELECT COUNT(\*) FROM farms;'
+  returning exactly 130 records in development mode (CT-06).
 
 - **Teardown Validation:** Executed 'docker compose down -v' and
   confirmed complete cleanup of local resources.

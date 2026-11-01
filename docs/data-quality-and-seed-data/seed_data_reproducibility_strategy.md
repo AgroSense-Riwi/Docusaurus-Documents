@@ -164,13 +164,13 @@ To verify acceptance criterion **CT-06** (Zero Duplicates & Full
 Repeatability), developers run the following verification protocol:
 
 \# Step 1: Run seed in production mode
-uv run python -m scripts.seed --mode prod --seed 42 --reset
+python -m seed --mode prod --seed 42 --reset
 
 \# Step 2: Record exact table row counts (e.g., SELECT COUNT(\*) FROM
 farms -\> 1300)
 
 \# Step 3: Re-run seed WITHOUT reset (testing UPSERT idempotency)
-uv run python -m scripts.seed --mode prod --seed 42
+python -m seed --mode prod --seed 42
 
 \# Step 4: Verify row counts remain EXACTLY identical with ZERO
 duplicate keys

@@ -124,7 +124,7 @@ before dependent application code is executed:
 >
 > **• Tier 4 — Database Migration & Seed Ingestion:** FastAPI executes
 > database Alembic migrations and triggers the seed engine script
-> (\`python -m seed.runner\`) automatically upon validated DB
+> (\`python -m seed\`) automatically upon validated DB
 > connection.
 
 ## 5. Complete Production-Grade docker-compose.yml Reference
