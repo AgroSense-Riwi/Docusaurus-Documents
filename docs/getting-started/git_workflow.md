@@ -4,13 +4,26 @@ This guide establishes the branching model, code standards, quality checks, and 
 
 ---
 
+### Branching Model (current practice)
+
+```
+feat/AGRO-123-...  ──PR──▶  dev  ──PR──▶  main
+```
+
+- Feature branches are created from `dev` and merged back into `dev` through a Pull Request.
+- `dev` is promoted to `main` only through a Pull Request.
+- In the **API** and **Database-seed** repositories, `main` is protected: a Pull Request is required, and force pushes and branch deletion are not allowed.
+- As of 2026-10-31, `main` has not yet been updated from `dev` in any repository.
+
+---
+
 ### 1. Start a Task (New Branch)
 
-Before starting your work, update your local `main` branch and create a feature branch using the Jira ticket key and a short description in `kebab-case`:
+Before starting your work, update your local `dev` branch and create a feature branch using the Jira ticket key and a short description in `kebab-case`:
 
 ```powershell
-# Update local main
-git switch main; git pull
+# Update local dev
+git switch dev; git pull
 
 # Create and switch to the task branch
 git switch -c feat/AGRO-123-add-sensor-endpoint
@@ -65,12 +78,13 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 
 #### Merging Strategy
 
-- **Squash and Merge:** Always use the **Squash and merge** option on GitHub to maintain a clean, linear history on the `main` branch.
+- **Squash and Merge:** Always use the **Squash and merge** option on GitHub to maintain a clean, linear history.
+- **Target branch:** open feature PRs against `dev`, not `main`.
 
 ---
 
 ### 4. Release Flow
 
-- **Continuous Deployment (Staging/Dev):** Every merge into the `main` branch is automatically deployed to the Staging/Development environment via CI/CD pipelines.
-- **Production Release:** Production deployments are triggered by creating a Git Release Tag directly from `main`.
+- **Current state (2026-10-31):** in the API repository, CI (`.github/workflows/ci.yml`) runs on pull requests to `dev` and on pushes to `dev`. The deploy workflow (`.github/workflows/deploy-ecs.yml`) is currently triggered by a push to `main` or `dev`, or manually.
+- **Planned production release:** production deployments triggered by a Git Release Tag created from `main`.
 - **Version format:** `v1.0.0`

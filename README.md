@@ -2,7 +2,7 @@
 
 This repository contains the Docusaurus documentation site for AgroSense Café.
 Maintain and publish documentation here; application code remains in the
-[AgroSense Café application repository](https://github.com/Pbyte5/AgroSense-Caf-IoT-Monitoring-and-Traceability-Framework).
+[AgroSense Café API repository](https://github.com/AgroSense-Riwi/API).
 
 ## Requirements
 
