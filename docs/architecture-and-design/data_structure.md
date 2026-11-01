@@ -11,7 +11,7 @@ This document describes the **target** schema (24 operational tables). The schem
 - `927ccb53d091` (*"Esquema inicial trazabilidad 13 tablas"*): creates the 13 tables marked **Implemented** below.
 - `c1a8f93e2b45`: adds row-level security policies on top of that schema (documented separately).
 
-**Pending merge — [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)** (branch `fix/security-and-functionality`, not yet in `dev`) adds four migrations: `a3f1c9d2e7b4` (buyer API credentials), `c8e2a7d5f0b1` (user login credentials), `b7d4e2f9a1c3` (deny-by-default RLS, see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#6-implementation-in-the-api-api-pr-20)) and `e5a9b3c7d1f2` (table `forest_reserves`, column `farms.geom` and trigger `trg_check_farm_forest_overlap`). Once merged, 14 tables will be implemented.
+**Pending merge — [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)** (branch `fix/security-and-functionality`, not yet in `dev`) adds four migrations: `a3f1c9d2e7b4` (buyer API credentials), `c8e2a7d5f0b1` (user login credentials), `b7d4e2f9a1c3` (deny-by-default RLS, see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3)) and `e5a9b3c7d1f2` (table `forest_reserves`, column `farms.geom` and trigger `trg_check_farm_forest_overlap`). Once merged, 14 tables will be implemented.
 
 | # | Table | Status |
 | --- | --- | --- |
@@ -163,7 +163,7 @@ Authorization (RBAC):
 - Operator tokens **must** carry a `role` claim with one of `AGRONOMIST`, `QUALITY_CHIEF`, `SUSTAINABILITY_COMMITTEE`, `ADMIN`; a token without a role, or with an unknown role, is rejected with `401` instead of receiving default privileges. A missing scope returns `403 Insufficient permissions`.
 - Endpoints restricted by role return `403 Operation not permitted for role '<role>'`.
 - `POST /api/v1/telemetry` is restricted to **`ADMIN` and `AGRONOMIST`**. This role assignment is a choice made in PR #20; it is not defined elsewhere in this documentation.
-- Buyer endpoints (`GET /api/v1/traceability/batches`, `GET /api/v1/traceability/{batch_code}`) require a buyer token with a UUID `buyer_id` claim and the `traceability:read` scope, and run their queries under the buyer's row-level security context (see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#6-implementation-in-the-api-api-pr-20)).
+- Buyer endpoints (`GET /api/v1/traceability/batches`, `GET /api/v1/traceability/{batch_code}`) require a buyer token with a UUID `buyer_id` claim and the `traceability:read` scope, and run their queries under the buyer's row-level security context (see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3)).
 
 ---
 
