@@ -4,6 +4,44 @@ In this document, we define the complete schema design, relational tables (3NF),
 
 ---
 
+## Implementation Status (as of 2026-10-31)
+
+This document describes the **target** schema (24 operational tables). The schema actually created in the database today is defined by the API Alembic migrations on the `dev` branch:
+
+- `927ccb53d091` (*"Esquema inicial trazabilidad 13 tablas"*): creates the 13 tables marked **Implemented** below.
+- `c1a8f93e2b45`: adds row-level security policies on top of that schema (documented separately).
+
+| # | Table | Status |
+| --- | --- | --- |
+| 1 | `departments` | Planned |
+| 2 | `municipalities` | Implemented |
+| 3 | `forest_reserves` | Planned |
+| 4 | `farm_reserve_overlaps` | Implemented |
+| 5 | `users` | Implemented |
+| 6 | `producers` | Implemented |
+| 7 | `international_buyers` | Implemented |
+| 8 | `buyer_api_audit_logs` | Planned |
+| 9 | `coffee_varieties` | Implemented |
+| 10 | `farms` | Implemented |
+| 11 | `farm_plots` | Implemented |
+| 12 | `sensor_types` | Planned |
+| 13 | `iot_sensors` | Planned |
+| 14 | `sensor_anomalies_log` | Planned |
+| 15 | `crop_nutrient_references` | Planned |
+| 16 | `soil_lab_analyses` | Planned |
+| 17 | `fertilizer_recommendations` | Planned |
+| 18 | `harvest_deliveries` | Implemented |
+| 19 | `export_batches` | Implemented |
+| 20 | `batch_farm_compositions` | Implemented |
+| 21 | `cupping_evaluations` | Implemented |
+| 22 | `buyer_batch_contracts` | Implemented |
+| 23 | `agronomic_alerts` | Planned |
+| 24 | `agronomist_field_visits` | Planned |
+
+"Planned" tables have no Alembic migration yet. Column definitions of implemented tables may differ in detail from this specification; the migration is the source of truth. For the deployment status of the pipelines that feed Parts 2 and 3, see [Current Project Status](../getting-started/current-status.md).
+
+---
+
 ## PART 1: Operational Relational Database (PostgreSQL — 3NF)
 
 This layer handles transactional operations, master data, traceability, and low-latency API queries (p95 at or below 500 ms, **RNF-03**).
