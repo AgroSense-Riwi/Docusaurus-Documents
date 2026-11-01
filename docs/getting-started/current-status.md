@@ -29,8 +29,37 @@ Sources: review of the AWS account (region `us-east-2`, Ohio) and of the
 | Cost estimate | [AGRO-12 cost analysis](../deliverables/agro12-aws-cost-analysis-and-budget-alarms.md) | Design-time estimate; not recalculated for the components actually deployed. |
 | Seed data | [Seed validation criteria](../data-quality-and-seed-data/seed-dataset-validation-criteria-en.md), [Reproducibility strategy](../data-quality-and-seed-data/seed_data_reproducibility_strategy.md) | Run with `python -m seed`. The dev profile produces 130 farms, at least 80 harvest deliveries and 10 export batches (asserted by Database-seed `tests/test_idempotency_ct06.py`). |
 | Git flow & CI/CD | [Git Workflow](./git_workflow.md) | Feature branches → PR → `dev`; `dev` → `main` via PR. `main` is protected in API and Database-seed and has not yet been updated from `dev` in any repository. The API deploy workflow is currently triggered by a push to `main` or `dev`. |
+| Pending merge (API PR #20) | See the section below | Security and functionality fixes on branch `fix/security-and-functionality` ([API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)), CI green, **open and not yet merged into `dev`**. Nothing in this row is deployed. |
 
-## Out of scope for this page
+## Pending merge (API PR #20)
 
-API authentication, row-level security behavior, health checks and
-telemetry handling are being reworked and will be documented separately.
+[API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) is open and
+**not yet merged into `dev`**; the rows above describe the state without it.
+Summary of what it changes:
+
+| Area | Change in PR #20 | Documented in |
+| --- | --- | --- |
+| Buyer authentication | `POST /api/v1/auth/buyer-token` requires `client_id` + `api_key`, verified against the Argon2 `api_key_hash`; the buyer must be `is_active`. | [Data structure — Authentication and RBAC](../architecture-and-design/data_structure.md#authentication-and-rbac-in-the-api-api-pr-20) |
+| Operator authentication / RBAC | `POST /api/v1/auth/token` authenticates against table `users` (email + Argon2 `password_hash`) and puts the user's real role in the token; tokens without a role are rejected. Telemetry only for `ADMIN` and `AGRONOMIST`. | Same as above |
+| Row-level security | Deny-by-default policies with `FORCE ROW LEVEL SECURITY`; buyer endpoints set `SET LOCAL app.current_buyer_id`; explicit operator path via `app.current_role`; API connects as `agrosense_app` (not table owner). A foreign batch returns `404` instead of `403`. | [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3) |
+| Certification (RN-09) | New table `forest_reserves`, column `farms.geom`, trigger `trg_check_farm_forest_overlap` with `ST_Intersects`; a farm without geometry makes the batch rejected. | [RN-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#64-rn-09-forest-reserves-and-certification-migration-e5a9b3c7d1f2) |
+| Health checks | `/health` checks the database and RabbitMQ and returns `503` on failure; new `/health/live` for ECS and the ALB. | [Healthcheck strategy](../infrastructure-and-operations/healthcheck_strategy.md#6-health-and-healthlive-endpoints-in-fastapi) |
+| Telemetry | Publishes to `agrosense.ingest.exchange` (vhost `/agrosense`); new consumer with manual ACK and DLX, as a Compose service and as a second container in the API ECS task. `definitions.json` is not loaded at boot. The consumer does not persist readings yet. | [RabbitMQ](../infrastructure-and-operations/rabbitmq.md#33-telemetry-flow-implemented-in-the-api-api-pr-20) |
+| Deploy | `dev` no longer deploys; `main` → staging; tag `vX.Y.Z` → production; `force_deploy` removed; OIDC if `AWS_ROLE_ARN` exists. HTTPS listener on the ALB when `ACM_CERTIFICATE_ARN` is set. | [Git Workflow](./git_workflow.md#after-api-pr-20-pending-merge) |
+| Airflow | Login enabled and its own secrets (Fernet, API and its own database). | [Local Environment Workflow](./local-environment-workflow-agrosense.md#api-authentication-and-credentials-api-pr-20) |
+
+### Manual steps before merging or deploying (from the PR)
+
+- **Secrets Manager (`agrosense/prod/`):**
+  - create `auth-username`, `auth-password-hash`, `airflow-database-url`, `airflow-fernet-key`, `airflow-api-secret`, `airflow-admin-user` and `airflow-admin-password`;
+  - change `rabbitmq-url` to the vhost `/%2Fagrosense`;
+  - change `database-url` to the user `agrosense_app`.
+- **EC2 Postgres:**
+  - run `infra/aws/ec2-postgres-app-role.sql`;
+  - if the table owner is not a superuser, grant it `BYPASSRLS`;
+  - create `airflow_db`.
+- **RabbitMQ with an existing volume:** `rabbitmqctl add_vhost /agrosense` and grant permissions to the user.
+- **GitHub:** environments `staging` and `production` with their secrets; optional `AWS_ROLE_ARN` (OIDC).
+- **ACM:** certificate in `us-east-2`, then re-run the infra script (`infra/aws/setup-ecs-infra.sh`).
+- **Data:** load `email` and `password_hash` of the users and `api_key_hash` of the buyers. They are generated with `python -m agrosense_api.cli`.
+- **Local:** `docker compose down -v` so that the new role is created.
