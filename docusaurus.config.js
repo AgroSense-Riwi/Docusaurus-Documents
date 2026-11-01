@@ -20,8 +20,8 @@ const config = {
 
   baseUrl: '/',
 
-  organizationName: 'Pbyte5',
-  projectName: 'AgroSense-Documents',
+  organizationName: 'AgroSense-Riwi',
+  projectName: 'Docusaurus-Documents',
 
   onBrokenLinks: 'throw',
 
@@ -38,7 +38,7 @@ const config = {
       ({
         docs: {
           sidebarPath: './sidebars.js',
-          editUrl: 'https://github.com/Pbyte5/AgroSense-Documents/tree/main/',
+          editUrl: 'https://github.com/AgroSense-Riwi/Docusaurus-Documents/tree/main/',
         },
         theme: {
           customCss: './src/css/custom.css',
@@ -81,11 +81,11 @@ const config = {
             items: [
               {
                 label: 'Documentation source',
-                href: 'https://github.com/Pbyte5/AgroSense-Documents',
+                href: 'https://github.com/AgroSense-Riwi/Docusaurus-Documents',
               },
               {
                 label: 'Application code',
-                href: 'https://github.com/Pbyte5/AgroSense-Caf-IoT-Monitoring-and-Traceability-Framework',
+                href: 'https://github.com/AgroSense-Riwi/API',
               },
             ],
           },
