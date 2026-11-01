@@ -140,8 +140,10 @@ development speed with full production volume testing:
   farms, 300 pilot sensor farms (900 total sensors), ~15,000 annual
   harvest deliveries, 500 export batches, and 40 international buyers as
   specified in Section 5.2 of the project specification.
-- **Development Profile (SEED_PROFILE=dev):** Scales down volume by 10x
-  (130 farms, 30 pilot farms, 1,500 deliveries, 50 batches) to enable
+- **Development Profile (SEED_PROFILE=dev):** Scales down volume
+  (130 farms, 30 pilot farms with 90 sensors, ≥ 80 harvest deliveries,
+  10 export batches, as asserted by the Database-seed test
+  `tests/test_idempotency_ct06.py`) to enable
   rapid local environment startup (\< 30 minutes, CT-01).
 
 ## 5.1 Atomic Reset Execution (--reset)

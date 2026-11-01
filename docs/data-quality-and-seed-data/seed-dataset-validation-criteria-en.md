@@ -35,7 +35,7 @@ processing pipelines.
 
 | **Category**         | **Target Metric / Rule**                                   | **Acceptance Criterion (Verifiable)**                                                | **Validation Method**    |
 |:---------------------|:-----------------------------------------------------------|:-------------------------------------------------------------------------------------|:-------------------------|
-| Completeness (dev)   | 130 farms, ~500 deliveries                                 | 100% match in record counts with zero NULL primary keys.                             | SQL Count / Pandas len() |
+| Completeness (dev)   | 130 farms, ≥ 80 harvest deliveries, 10 export batches      | 100% match in record counts with zero NULL primary keys.                             | SQL Count / Pandas len() |
 | Completeness (full)  | 1,300 farms, 300 pilot (900 sensors), ~15k deliveries/year | Full volume populated covering all domain entities.                                  | pytest Assertion Script  |
 | Relational Integrity | Foreign Key constraints & coherent catalog                 | Zero orphan records. All deliveries, lots, and sensors map to valid parent entities. | SQL Foreign Key Checks   |
 | Spatial Integrity    | PostGIS SRID 4326 & valid geometries                       | ST_IsValid(geom) = True for 100% of farm polygons in coffee region.                  | PostGIS ST_IsValid Query |
@@ -65,23 +65,32 @@ validated by this checklist:
 **SQL Inspections for Relational, Spatial, and Sensor Quality
 Integrity:**
 
+Table and column names below match the current API Alembic migration
+(`927ccb53d091`). See the implementation status in
+[Dataset & Database Structure](../architecture-and-design/data_structure.md#implementation-status-as-of-2026-10-31).
+
+```sql
 -- 1. Foreign Key Integrity Check (Zero Orphan Deliveries)
-SELECT COUNT(\*) AS orphan_deliveries_count
-FROM delivery d
-LEFT JOIN farm f ON d.farm_id = f.farm_id
-WHERE f.farm_id IS NULL;
+SELECT COUNT(*) AS orphan_deliveries_count
+FROM harvest_deliveries d
+LEFT JOIN farms f ON d.farm_id = f.farm_id
+WHERE d.farm_id IS NOT NULL
+  AND f.farm_id IS NULL;
 
 -- 2. PostGIS Geometry Validity & SRID Check
-SELECT farm_id, name
-FROM farm
-WHERE ST_IsValid(geom) = FALSE OR ST_SRID(geom) != 4326;
+-- The current schema has no farm polygon column (farms stores latitude/longitude);
+-- the only geometry column is farm_reserve_overlaps.overlap_geometry.
+SELECT overlap_id, farm_id, reserve_name
+FROM farm_reserve_overlaps
+WHERE ST_IsValid(overlap_geometry) = FALSE
+   OR ST_SRID(overlap_geometry) != 4326;
+```
 
--- 3. Detection of Flatlining / Defective Sensors (RN-02)
-SELECT sensor_id, STDDEV(reading_value)
-FROM sensor_reading
-WHERE reading_timestamp \>= NOW() - INTERVAL '24 hours'
-GROUP BY sensor_id
-HAVING STDDEV(reading_value) \< 0.005;
+- **Pending — farm polygon validity:** a farm-polygon geometry column is not
+  part of the current migration; this check will be added when it exists.
+- **Pending — flatlining / defective sensor detection (RN-02):** the sensor
+  tables (`sensor_types`, `iot_sensors`, `sensor_anomalies_log`) and a sensor
+  readings store are not yet in the migration, so no SQL check is defined yet.
 
 ### Automated Idempotency Assertion Test (pytest / CT-06):
 
