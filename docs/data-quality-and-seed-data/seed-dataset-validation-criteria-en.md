@@ -35,7 +35,7 @@ processing pipelines.
 
 | **Category**         | **Target Metric / Rule**                                   | **Acceptance Criterion (Verifiable)**                                                | **Validation Method**    |
 |:---------------------|:-----------------------------------------------------------|:-------------------------------------------------------------------------------------|:-------------------------|
-| Completeness (dev)   | 50 farms, ~500 deliveries                                  | 100% match in record counts with zero NULL primary keys.                             | SQL Count / Pandas len() |
+| Completeness (dev)   | 130 farms, ~500 deliveries                                 | 100% match in record counts with zero NULL primary keys.                             | SQL Count / Pandas len() |
 | Completeness (full)  | 1,300 farms, 300 pilot (900 sensors), ~15k deliveries/year | Full volume populated covering all domain entities.                                  | pytest Assertion Script  |
 | Relational Integrity | Foreign Key constraints & coherent catalog                 | Zero orphan records. All deliveries, lots, and sensors map to valid parent entities. | SQL Foreign Key Checks   |
 | Spatial Integrity    | PostGIS SRID 4326 & valid geometries                       | ST_IsValid(geom) = True for 100% of farm polygons in coffee region.                  | PostGIS ST_IsValid Query |
@@ -45,17 +45,20 @@ processing pipelines.
 # 3. Validation Criteria for Injected Quality Defects (Section 5.3)
 
 To verify that downstream pipelines correctly handle real-world
-telemetry anomalies, the synthetic dataset generator injects six
-controlled defect scenarios at a configurable rate:
+telemetry anomalies, the synthetic dataset generator injects controlled
+defect scenarios at a configurable rate. Defect IDs follow the canonical
+[Seed Data Defects Catalog Matrix (v2)](./seed_data_defects_catalog_matrix-v2.md),
+which matches the generator code; the table below covers the subset
+validated by this checklist:
 
 | **Defect ID** | **Injected Anomaly (Sec. 5.3)**            | **Business Rule / Criterion** | **Dataset Validation Criterion**                                                                |
 |:--------------|:-------------------------------------------|:------------------------------|:------------------------------------------------------------------------------------------------|
 | DEF-01        | Lagged / out-of-order sensor timestamps    | RN-01 & CA-01                 | Confirm readings are sorted by device_timestamp and correctly slotted into ±15 min window.      |
 | DEF-02        | Flatlining sensor (variance \<0.5% in 24h) | RN-02 & CA-02                 | Verify variance query flags sensor as DEFECTIVE and excludes it from alert processing.          |
-| DEF-03        | Inverted / out-of-bounds coordinates       | PostGIS ST_Contains           | Confirm spatial validation isolates farm polygons located outside Colombia coffee bounding box. |
-| DEF-04        | Mixed lab units (ppm vs mg/kg)             | RN-07 & CA-06                 | Validate unit normalizer handles both inputs producing identical fertilization recommendations. |
-| DEF-05        | Export lots with untraceable farm origin   | RN-08 & CA-07                 | Confirm system blocks EXPORTABLE status unless 100% of kilos are traced to registered farms.    |
-| DEF-06        | Farm polygon overlap with forest reserve   | RN-09 & CA-08                 | Verify ST_Intersects detects overlap and rejects farm contribution from certified export lots.  |
+| DEF-04        | Inverted / out-of-bounds coordinates       | PostGIS ST_Contains           | Confirm spatial validation isolates farm polygons located outside Colombia coffee bounding box. |
+| DEF-05        | Mixed lab units (ppm vs mg/kg)             | RN-07 & CA-06                 | Validate unit normalizer handles both inputs producing identical fertilization recommendations. |
+| DEF-06        | Export lots with untraceable farm origin   | RN-08 & CA-07                 | Confirm system blocks EXPORTABLE status unless 100% of kilos are traced to registered farms.    |
+| DEF-07        | Farm polygon overlap with forest reserve   | RN-09 & CA-08                 | Verify ST_Intersects detects overlap and rejects farm contribution from certified export lots.  |
 
 # 4. Automated Verification Inspection Snippets (SQL & pytest)
 
@@ -106,7 +109,8 @@ idempotent (CT-06 violation)'
 - **\[X\]** PostGIS ST_IsValid returns TRUE for 100% of synthetic farm
   polygons.
 
-- **\[X\]** Controlled defect injection (DEF-01 to DEF-06) verified
+- **\[X\]** Controlled defect injection (DEF-01, DEF-02, DEF-04 to DEF-07 per
+  catalog v2) verified
   within configured DEFECT_RATE bounds.
 
 - **\[X\]** Zero hardcoded secrets or credentials present in seed
