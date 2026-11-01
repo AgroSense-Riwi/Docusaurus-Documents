@@ -89,7 +89,7 @@ without external AWS credentials or cloud billing. Exposes edge port
 > http://localhost:4566/\_localstack/health \| grep -q '"s3":
 > "running"'
 > **• Environment Variables:** SERVICES=s3,
-> AWS_DEFAULT_REGION=us-east-1, DOCKER_HOST=unix:///var/run/docker.sock
+> AWS_DEFAULT_REGION=us-east-2, DOCKER_HOST=unix:///var/run/docker.sock
 
 ### 3.5 Application REST API Server — FastAPI
 
@@ -220,7 +220,7 @@ Café:
 | \- "4566:4566"\\                                                                    |
 | environment:\\                                                                      |
 | \- SERVICES=s3\\                                                                    |
-| \- AWS_DEFAULT_REGION=us-east-1\\                                                   |
+| \- AWS_DEFAULT_REGION=us-east-2\\                                                   |
 | \- DOCKER_HOST=unix:///var/run/docker.sock\\                                        |
 | volumes:\\                                                                          |
 | \- localstack_data:/var/lib/localstack\\                                            |
@@ -248,7 +248,7 @@ Café:
 | postgresql://agrosense_user:agrosense_secure_pass_2026@postgres:5432/agrosense_db\\ |
 | RABBITMQ_URL: amqp://agrosense_mq:mq_secure_pass_2026@rabbitmq:5672/\\              |
 | S3_ENDPOINT_URL: http://localstack:4566\\                                           |
-| AWS_DEFAULT_REGION: us-east-1\\                                                     |
+| AWS_DEFAULT_REGION: us-east-2\\                                                     |
 | AWS_ACCESS_KEY_ID: mock_key\\                                                       |
 | AWS_SECRET_ACCESS_KEY: mock_secret\\                                                |
 | networks:\\                                                                         |

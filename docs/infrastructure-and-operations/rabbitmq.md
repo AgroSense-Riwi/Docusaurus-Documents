@@ -182,7 +182,7 @@ vm_memory_high_watermark.relative = 0.6
 - **Default Mock Credentials:**
   - `AWS_ACCESS_KEY_ID=test`
   - `AWS_SECRET_ACCESS_KEY=test`
-  - `AWS_DEFAULT_REGION=us-east-1`
+  - `AWS_DEFAULT_REGION=us-east-2`
 
 ### 4.2 Medallion Bucket Initialization Script (`docker/localstack/init/01_init_s3_buckets.sh`)
 
@@ -206,7 +206,7 @@ BUCKETS=(
 )
 
 for BUCKET in "${BUCKETS[@]}"; do
-  awslocal s3 mb "s3://${BUCKET}" --region us-east-1 || true
+  awslocal s3 mb "s3://${BUCKET}" --region us-east-2 || true
   echo "✅ Bucket verified/created: s3://${BUCKET}"
 done
 
@@ -287,7 +287,7 @@ services:
     environment:
       SERVICES: s3
       PERSISTENCE: 1
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-2}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
     ports:
@@ -360,7 +360,7 @@ RABBITMQ_URL=amqp://agrosense_mq:agrosense_mq_secret@localhost:5672/%2Fagrosense
 # ============================================================================
 AWS_ACCESS_KEY_ID=test
 AWS_SECRET_ACCESS_KEY=test
-AWS_DEFAULT_REGION=us-east-1
+AWS_DEFAULT_REGION=us-east-2
 LOCALSTACK_PORT=4566
 AWS_ENDPOINT_URL=http://localhost:4566
 # AWS_ENDPOINT_URL=http://localstack:4566  # (Use inside Docker containers)
