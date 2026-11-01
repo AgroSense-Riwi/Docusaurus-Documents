@@ -36,7 +36,7 @@ Each `healthcheck` block in `docker-compose.yml` is calibrated with four core pa
 | **PostgreSQL** | `agrosense_postgres`   | `pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}`   |   `10s`    |   `5s`    |    `5`    |     `20s`      | The engine accepts SQL connections on the main DB after `/docker-entrypoint-initdb.d/` has finished.   |
 | **RabbitMQ**   | `agrosense_rabbitmq`   | `rabbitmq-diagnostics -q ping`                       |   `10s`    |   `5s`    |    `5`    |     `20s`      | The Erlang node is active, AMQP port `5672` responds, and the queues are loaded.                       |
 | **LocalStack** | `agrosense_localstack` | `awslocal s3 ls`                                     |   `10s`    |   `5s`    |    `5`    |     `15s`      | The S3 API on port `4566` responds and lists the Medallion buckets.                                    |
-| **FastAPI**    | `agrosense_fastapi`    | `curl -f http://localhost:8000/health`               |   `15s`    |   `5s`    |    `3`    |     `10s`      | The Uvicorn server responds `HTTP 200 OK`, validating an active connection to the DB, queue, and S3.   |
+| **FastAPI**    | `agrosense_fastapi`    | `curl -f http://localhost:8000/health`               |   `15s`    |   `5s`    |    `3`    |     `10s`      | The Uvicorn server responds `HTTP 200 OK`, validating an active connection to the DB and the queue (S3 is not checked — see §6). |
 
 ---
 
@@ -195,111 +195,51 @@ volumes:
 
 ---
 
-## 6. `/health` Endpoint Specification in FastAPI
+## 6. `/health` and `/health/live` Endpoints in FastAPI
 
-For the `fastapi` container's healthcheck to be a true **Readiness** indicator (and not just a shallow check that the HTTP server is up), the `GET /health` endpoint actively verifies connectivity with the dependent services.
+> **Status:** the behavior below is implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **pending merge — not yet in `dev`**. The real implementation lives in the API repository at `apps/api/src/agrosense_api/api/v1/endpoints/health.py` (both routes are mounted at the root, without the `/api/v1` prefix).
+
+The API exposes two probes with different purposes:
+
+| Endpoint | Type | What it checks | Used by |
+| :-- | :-- | :-- | :-- |
+| `GET /health` | Readiness | PostgreSQL (`SELECT 1` through the API engine) and RabbitMQ (TCP connection to the AMQP host/port of `AGROSENSE_RABBITMQ_URL`; `5672`, or `5671` for `amqps`). Each check has a 2-second timeout and both run in parallel. | Docker Compose healthcheck of the `api` service and monitoring. |
+| `GET /health/live` | Liveness | Nothing external: it only confirms the process answers HTTP. | ECS container healthcheck (`infra/aws/ecs/task-definition-api.json`) and the ALB target group health check (`infra/aws/setup-ecs-infra.sh`). |
+
+ECS and the ALB use `/health/live` so that a transient database or broker outage does not make ECS replace every task in a loop (flapping). `setup-ecs-infra.sh` also realigns the health check path of an existing target group to `/health/live`.
 
 ### 6.1 HTTP Response Contract
 
-- **Healthy State (`HTTP 200 OK`):**
+- **`GET /health` — healthy (`HTTP 200 OK`):**
 
   ```json
   {
     "status": "healthy",
     "database": "connected",
     "rabbitmq": "connected",
-    "storage": "connected"
+    "storage": "not_checked"
   }
   ```
-- **Degraded / Unavailable State (`HTTP 503 Service Unavailable`):**
-  When any dependency fails, the endpoint returns `503 Service Unavailable`, which makes `curl -f` return a non-zero exit code (`exit code 22`) and causes Docker to mark the container as `unhealthy`:
+- **`GET /health` — unavailable (`HTTP 503 Service Unavailable`):** returned when the database or RabbitMQ is not `connected`. `curl -f` then exits non-zero and Docker marks the container `unhealthy`:
 
   ```json
   {
     "status": "unhealthy",
     "database": "connected",
     "rabbitmq": "disconnected",
-    "storage": "connected"
+    "storage": "not_checked"
   }
   ```
 
-### 6.2 Reference Implementation (`app/api/routes/health.py`)
+  Possible values per dependency: `connected`, `disconnected`, `not_configured` (RabbitMQ URL not set; this also produces `503`) and `not_checked`.
+- **S3 / LocalStack is not checked:** the API does not use S3 in its request path, so `storage` is always reported as `not_checked`. The S3 check shown in earlier versions of this page is not implemented.
+- **`GET /health/live` (`HTTP 200 OK`):**
 
-```python
-import socket
-from urllib.parse import urlparse
-import boto3
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-from app.core.config import settings
-from app.core.database import get_db
-
-router = APIRouter(tags=["Health & Readiness"])
-
-
-def check_rabbitmq_connection(rabbitmq_url: str, timeout: float = 2.0) -> bool:
-    """Verifies that the RabbitMQ AMQP port accepts TCP connections."""
-    try:
-        parsed = urlparse(rabbitmq_url)
-        host = parsed.hostname or "rabbitmq"
-        port = parsed.port or 5672
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-def check_s3_storage(endpoint_url: str) -> bool:
-    """Verifies that LocalStack S3 responds and contains the Medallion buckets."""
-    try:
-        s3_client = boto3.client(
-            "s3",
-            endpoint_url=endpoint_url,
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=settings.AWS_DEFAULT_REGION,
-        )
-        s3_client.list_buckets()
-        return True
-    except Exception:
-        return False
-
-
-@router.get("/health", status_code=status.HTTP_200_OK)
-def health_check(response: Response, db: Session = Depends(get_db)) -> dict[str, str]:
-    """
-    Liveness and Readiness endpoint for Docker Compose and load balancers.
-    Verifies real connectivity with PostgreSQL, RabbitMQ, and LocalStack S3.
-    """
-    # 1. Check PostgreSQL (Serving DB)
-    db_status = "connected"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception:
-        db_status = "disconnected"
-
-    # 2. Check RabbitMQ (AMQP Broker)
-    mq_status = "connected" if check_rabbitmq_connection(settings.RABBITMQ_URL) else "disconnected"
-
-    # 3. Check LocalStack (Mock S3 Storage)
-    s3_status = "connected" if check_s3_storage(settings.AWS_ENDPOINT_URL) else "disconnected"
-
-    is_healthy = all(service == "connected" for service in (db_status, mq_status, s3_status))
-
-    if not is_healthy:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-
-    return {
-        "status": "healthy" if is_healthy else "unhealthy",
-        "database": db_status,
-        "rabbitmq": mq_status,
-        "storage": s3_status,
-    }
-```
+  ```json
+  { "status": "alive", "service": "agrosense-api" }
+  ```
 
 ---
-
 ## 7. Verification and Diagnostic Commands
 
 During local development, use the following commands to inspect the health status and audit the startup times of each container:
