@@ -331,10 +331,54 @@ batch does not exist from the buyer's point of view). The `403` branch in the
 service is only reachable when no RLS context applies (non-PostgreSQL
 database).
 
-## 6.4 Verification
+## 6.4 RN-09: forest reserves and certification (migration `e5a9b3c7d1f2`)
+
+Migration `e5a9b3c7d1f2` adds the spatial support for RN-09:
+
+- New table **`forest_reserves`**: `reserve_id` (`UUID`, PK, `gen_random_uuid()`),
+  `municipality_id` (`INT`, nullable, FK → `municipalities`), `name`
+  (`VARCHAR(150)`, `NOT NULL`), `geom` (`geometry(POLYGON, 4326)`, `NOT NULL`),
+  `created_at`, `updated_at`; GIST index `idx_forest_reserves_geom`. The
+  polygon column is `geom`, **not** `polygon_geojson` as in the
+  [table specification](../architecture-and-design/data_structure.md).
+- New column **`farms.geom`** (`geometry(POLYGON, 4326)`, **nullable** so the
+  current seed keeps working) with GIST index `idx_farms_geom`.
+- Function `update_farm_forest_overlap()` and trigger
+  **`trg_check_farm_forest_overlap`** (`BEFORE INSERT OR UPDATE OF geom, overlaps_reserve ON farms`):
+  when `NEW.geom` is not null, it sets `NEW.overlaps_reserve` to
+  `EXISTS (SELECT 1 FROM forest_reserves rf WHERE ST_Intersects(NEW.geom, rf.geom))`.
+  When `geom` is null, the received value is kept.
+- If the role `agrosense_app` exists, it receives DML privileges on
+  `forest_reserves`.
+
+The certification guard trigger of section 3
+(`enforce_zero_deforestation_certification`) is **not** implemented as a
+trigger. Instead, the API service `services/certification_engine.py`
+evaluates each batch in Python with data read from PostGIS:
+
+1. **RN-08:** the sum of `contributed_kg` of the batch compositions must
+   equal `total_weight_kg` (tolerance 0.01 kg); every contribution must be
+   greater than 0.
+2. **RN-09:** for each origin farm, a query computes
+   `ST_Intersects(farms.geom, forest_reserves.geom)` and the overlap area
+   (`ST_Area(ST_Intersection(...)::geography) / 10000`, in hectares). A farm
+   counts as overlapping if the spatial test is positive, if
+   `farms.overlaps_reserve` is `true`, or if it has rows in
+   `farm_reserve_overlaps`.
+3. **Missing geometry is never compliant:** a farm without `geom`, a farm
+   that does not exist, or a composition without `farm_id` is reported as
+   "without geometry or spatial evaluation" and the batch is **rejected**.
+4. Result: `CERTIFICADO` if there are no rejection reasons, otherwise
+   `RECHAZADO` (states `EN_PROCESO`, `CERTIFICADO`, `RECHAZADO`).
+
+`evaluate_batch_certification(session, batch_id)` reads `export_batches`,
+which is protected by RLS, so it needs a session with the operator context
+(`get_operator_db`). In PR #20 no HTTP endpoint calls this function yet.
+
+## 6.5 Verification
 
 The API CI (`.github/workflows/ci.yml`) starts a `postgis/postgis:16-3.4-alpine`
 service, runs `alembic upgrade head` on a test database and executes the RLS
-tests (Buyer A vs Buyer B) and the migration tests. According to the PR, these
+tests (Buyer A vs Buyer B), the PostGIS RN-09 tests and the migration tests. According to the PR, these
 tests had never been run locally and are validated for the first time in the
 CI of PR #20.

@@ -11,11 +11,13 @@ This document describes the **target** schema (24 operational tables). The schem
 - `927ccb53d091` (*"Esquema inicial trazabilidad 13 tablas"*): creates the 13 tables marked **Implemented** below.
 - `c1a8f93e2b45`: adds row-level security policies on top of that schema (documented separately).
 
+**Pending merge — [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)** (branch `fix/security-and-functionality`, not yet in `dev`) adds four migrations: `a3f1c9d2e7b4` (buyer API credentials), `c8e2a7d5f0b1` (user login credentials), `b7d4e2f9a1c3` (deny-by-default RLS, see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#6-implementation-in-the-api-api-pr-20)) and `e5a9b3c7d1f2` (table `forest_reserves`, column `farms.geom` and trigger `trg_check_farm_forest_overlap`). Once merged, 14 tables will be implemented.
+
 | # | Table | Status |
 | --- | --- | --- |
 | 1 | `departments` | Planned |
 | 2 | `municipalities` | Implemented |
-| 3 | `forest_reserves` | Planned |
+| 3 | `forest_reserves` | Implemented in API PR #20 (pending merge) |
 | 4 | `farm_reserve_overlaps` | Implemented |
 | 5 | `users` | Implemented |
 | 6 | `producers` | Implemented |
@@ -74,6 +76,8 @@ This layer handles transactional operations, master data, traceability, and low-
 | `name`            | `VARCHAR(150)` | `NOT NULL`             | Official name of the protected forest area.                    |
 | `polygon_geojson` | `JSONB`        | `NOT NULL`             | Spatial boundary used to detect deforestation/overlap.         |
 | `created_at`      | `TIMESTAMPTZ`  | `NOT NULL`             | Record creation timestamp.                                     |
+
+> **Implementation note — API PR #20 (pending merge):** migration `e5a9b3c7d1f2` creates `forest_reserves` with the polygon in a PostGIS column **`geom`** (`geometry(POLYGON, 4326)`, `NOT NULL`, GIST index) instead of `polygon_geojson`, `municipality_id` nullable, and an extra `updated_at`. See [RN-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#64-rn-09-forest-reserves-and-certification-migration-e5a9b3c7d1f2).
 
 #### 4. Table: `farm_reserve_overlaps`
 
@@ -192,6 +196,8 @@ Authorization (RBAC):
 | `water_usage_m3_ton` | `DECIMAL(10,2)` | `NOT NULL`             | Water consumption rate per ton of coffee (**RN-10**).                |
 | `overlaps_reserve`   | `BOOLEAN`       | `DEFAULT FALSE`        | Denormalized flag updated from`farm_reserve_overlaps` (**RN-09**). |
 | `has_valid_coords`   | `BOOLEAN`       | `DEFAULT TRUE`         | `FALSE` if seed injected inverted or out-of-country coordinates.         |
+
+> **Implementation note — API PR #20 (pending merge):** migration `e5a9b3c7d1f2` adds `farms.geom` (`geometry(POLYGON, 4326)`, **nullable**, GIST index). The trigger `trg_check_farm_forest_overlap` recalculates `overlaps_reserve` with `ST_Intersects` against `forest_reserves.geom` whenever `geom` is set. In batch certification, a farm without `geom` is treated as **non-compliant** with RN-09, so the batch is rejected.
 
 #### 11. Table: `farm_plots` (Blocks)
 
