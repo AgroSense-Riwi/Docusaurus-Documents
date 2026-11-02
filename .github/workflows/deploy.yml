@@ -1,4 +1,4 @@
-name: Deploy documentation to GitHub Pages
+name: Deploy documentation to Firebase Hosting
 
 on:
   push:
@@ -8,16 +8,18 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: firebase-hosting
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    env:
+      # Firebase project from .firebaserc; the service account JSON is a repository secret.
+      FIREBASE_PROJECT_ID: gen-lang-client-0936632479
+      HAS_FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -30,18 +32,14 @@ jobs:
         run: npm ci
       - name: Build site
         run: npm run build
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Skip deploy (secret missing)
+        if: env.HAS_FIREBASE_SA != 'true'
+        run: echo "::warning::Secret FIREBASE_SERVICE_ACCOUNT is not set; the site was built but not deployed."
+      - name: Deploy to Firebase Hosting (live channel)
+        if: env.HAS_FIREBASE_SA == 'true'
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          path: build
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          channelId: live
