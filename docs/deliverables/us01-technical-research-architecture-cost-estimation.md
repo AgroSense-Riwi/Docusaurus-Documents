@@ -38,6 +38,8 @@ program topics.
 > auto-scaling, fault tolerance, and minimal operational overhead
 > without over-provisioning.*
 
+> **Recalculated on 2026-11-02:** the figures in this deliverable are the design-time estimate. With AWS Price List API prices and the components actually used (PostgreSQL on EC2, broker on Fargate, 14 secrets), production is **\$254.21 USD/month**, optimized production **\$215.65 USD/month**, and the staging environment as deployed costs **\$68.02 USD/month** with everything stopped (NAT Gateway, ALB and public IPv4), so the ~\$35.00 scenario is not reached. See [AGRO-12 cost analysis](./agro12-aws-cost-analysis-and-budget-alarms.md#6-difference-from-the-initial-estimate).
+
 ## Summary of Acceptance Criteria (AC) Fulfillment
 
 - **AC-01 (Architecture Proposal):** Complete end-to-end logical and
@@ -209,6 +211,8 @@ of 2026-10-31 the Airflow, PySpark, RabbitMQ and FastConsumer lines are
 :::
 
 ## 4.1 Minimum Viable Cost Scenario (~\$35.00 USD/month) — Deliverable E-15
+
+> **Recalculated on 2026-11-02:** the staging environment as deployed costs \$68.02 USD/month with everything stopped; this scenario is only reached by deleting the NAT Gateway and the ALB while idle (\$7.79 USD/month). See [AGRO-12, Section 3.3](./agro12-aws-cost-analysis-and-budget-alarms.md#33-fixed-cost-levers-for-staging-not-in-the-first-version).
 
 **Cost Reduction Strategy:** To address extreme budgetary constraints
 during early cooperative pilot phases, a Minimum Viable Cost Scenario
