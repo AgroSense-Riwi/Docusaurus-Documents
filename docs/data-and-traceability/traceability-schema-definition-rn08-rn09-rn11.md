@@ -222,7 +222,7 @@ and RN-11, automated integration tests perform the following assertions:
 
 > **Status:** the behavior below is implemented in
 > [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch
-> `fix/security-and-functionality`), **pending merge — not yet in `dev`**.
+> `fix/security-and-functionality`), **merged into `dev` on 2026-11-02**.
 > Sections 2–5 above are the design specification; the real tables use the
 > English names of the [Dataset & Database Structure](../architecture-and-design/data_structure.md)
 > (`export_batches`, `buyer_batch_contracts`, `farms`, `forest_reserves`).
@@ -321,15 +321,60 @@ grants it DML privileges on the existing tables.
   with a verification query that must return `rolsuper = f` and
   `rolbypassrls = f` for `agrosense_app`.
 
-## 6.3 Deviation from the specification: foreign batch returns 404
+## 6.3 CA-09: foreign batch returns 403 under RLS (migration `f3b8c1d4a6e2`)
 
 The design (and **CA-09**) expects `403 Forbidden` when a buyer requests a
-batch that belongs to another buyer. With the PR #20 policies, PostgreSQL
-hides that batch from the buyer's session, so
-`GET /api/v1/traceability/{batch_code}` returns **`404 Not Found`** (the
-batch does not exist from the buyer's point of view). The `403` branch in the
-service is only reachable when no RLS context applies (non-PostgreSQL
-database).
+batch that belongs to another buyer. With the PR #20 policies alone,
+PostgreSQL hides that batch from the buyer's session, so
+`GET /api/v1/traceability/{batch_code}` returned `404 Not Found`. This was
+fixed on 2026-11-02 by API PRs
+[#26](https://github.com/AgroSense-Riwi/API/pull/26) and
+[#28](https://github.com/AgroSense-Riwi/API/pull/28) (promoted to `main` with
+PRs #27 and #29):
+
+- Migration **`f3b8c1d4a6e2`** (revises `e5a9b3c7d1f2`) creates the function
+  **`export_batch_exists(p_batch_code text) RETURNS boolean`**, `plpgsql`,
+  `SECURITY DEFINER`, `SET search_path = public, pg_temp`. It sets
+  `app.current_role = 'operator'` with `set_config(..., true)` only while it
+  checks `export_batches`, restores the previous value and returns only a
+  boolean, so no batch data reaches the buyer.
+- The function does **not** use a `SET app.current_role` clause in its
+  definition: PostgreSQL requires a superuser for that, and on EC2 the table
+  owner is not one (`permission denied to set parameter "app.current_role"`).
+- `services/traceability.py` (`get_batch_trace`): when the batch is not
+  visible to the buyer, it calls `export_batch_exists`. If it returns
+  `true` the API answers **`403`** ("Este lote no está asignado a este
+  comprador"); otherwise **`404`**.
+
+| Request by buyer A | HTTP status |
+| --- | --- |
+| Own batch | `200` |
+| Batch that exists but belongs to buyer B (CA-09) | `403` |
+| Batch code that does not exist | `404` |
+
+Tests: `apps/api/tests/test_buyer_traceability.py` and
+`apps/api/tests/test_postgres_rls_scrum157.py`
+(`test_ca09_foreign_batch_is_forbidden_not_not_found`).
+
+**Verified in AWS on 2026-11-02** (API connected as `agrosense_app`, task
+definition `agrosense-api:23`) with the API scripts:
+
+```bash
+./infra/aws/buyer-keys.sh                          # lists buyers and their batches
+./infra/aws/buyer-keys.sh BUY-INT-001 BUY-INT-002  # new api_key; only the Argon2 hash is stored
+./infra/aws/ca09-smoke-test.sh BUY-INT-001 BUY-INT-002
+```
+
+`buyer-keys.sh` writes the keys to `~/.agrosense/buyer-keys.env` (mode 600)
+and never prints them or stores them in the repository (CT-02). Result:
+token `200` for both buyers, own batch `EXP-2026-0001` → `200`, foreign
+batch `EXP-2026-0002` → `403`, unknown code → `404`, and buyer A's list does
+not include `EXP-2026-0002` (RN-11).
+
+**Difference from the specification:** the
+[edge-case specification](../data-quality-and-seed-data/seed_data_edge_cases_specification.md)
+also expects the `403` to write an event to `buyer_api_audit_logs`. That
+table and the audit write are **not implemented** yet.
 
 ## 6.4 RN-09: forest reserves and certification (migration `e5a9b3c7d1f2`)
 
