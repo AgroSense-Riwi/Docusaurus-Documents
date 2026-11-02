@@ -371,10 +371,11 @@ token `200` for both buyers, own batch `EXP-2026-0001` → `200`, foreign
 batch `EXP-2026-0002` → `403`, unknown code → `404`, and buyer A's list does
 not include `EXP-2026-0002` (RN-11).
 
-**Difference from the specification:** the
+The
 [edge-case specification](../data-quality-and-seed-data/seed_data_edge_cases_specification.md)
 also expects the `403` to write an event to `buyer_api_audit_logs`. That
-table and the audit write are **not implemented** yet.
+was added later; see
+[6.5 CA-09 audit log](#65-ca-09-audit-log-buyer_api_audit_logs-migration-a9c4e6b2d8f1).
 
 ## 6.4 RN-09: forest reserves and certification (migration `e5a9b3c7d1f2`)
 
@@ -420,7 +421,51 @@ evaluates each batch in Python with data read from PostGIS:
 which is protected by RLS, so it needs a session with the operator context
 (`get_operator_db`). In PR #20 no HTTP endpoint calls this function yet.
 
-## 6.5 Verification
+## 6.5 CA-09 audit log: `buyer_api_audit_logs` (migration `a9c4e6b2d8f1`)
+
+Implemented on 2026-11-02 by
+[API PR #30](https://github.com/AgroSense-Riwi/API/pull/30) (promoted to
+`main` with PR #31, task definition `agrosense-api:24`). It follows table 8 of
+[Dataset & Database Structure](../architecture-and-design/data_structure.md).
+
+- Migration **`a9c4e6b2d8f1`** (revises `f3b8c1d4a6e2`) creates
+  `buyer_api_audit_logs` (`audit_id`, `buyer_id`, `batch_id`,
+  `http_status_code`, `latency_ms DECIMAL(8,2)`, `requested_at`), with
+  indexes on `buyer_id` and `requested_at`, `ENABLE` + `FORCE ROW LEVEL
+  SECURITY`, a buyer policy (`SELECT` of the buyer's own rows only) and an
+  operator policy (`ALL`). If the role `agrosense_app` exists it receives
+  `SELECT, INSERT` on the table.
+- The API writes through the function
+  **`log_buyer_api_access(p_batch_code, p_http_status_code, p_latency_ms,
+  p_requested_at)`**, `plpgsql`, `SECURITY DEFINER`. It takes the buyer from
+  `app.current_buyer_id` (not from a parameter, so a buyer cannot write rows
+  for another buyer) and resolves `batch_id` from the batch code even when
+  the batch belongs to another buyer, using the same `set_config` pattern as
+  `export_batch_exists`. A buyer cannot insert into the table directly: the
+  `INSERT` is rejected by RLS.
+- `GET /api/v1/traceability/{batch_code}` measures the latency, writes a row
+  for **`200`** and **`403`** and commits it (the request session otherwise
+  ends with a rollback and the `403` row would be lost). A `404` is not
+  written. If the audit write fails, the error is logged and the response to
+  the buyer does not change.
+
+Tests: `apps/api/tests/test_buyer_traceability.py` and
+`apps/api/tests/test_postgres_rls_scrum157.py`
+(`test_ca09_forbidden_request_is_written_to_audit_log`,
+`test_buyer_cannot_insert_audit_rows_directly`).
+
+**Verified in AWS on 2026-11-02:** after applying the migration on the EC2
+database and running `./infra/aws/ca09-smoke-test.sh BUY-INT-001 BUY-INT-002`,
+the table contained:
+
+| `client_id` | Batch | `http_status_code` | `latency_ms` |
+| --- | --- | --- | --- |
+| `BUY-INT-001` | `EXP-2026-0001` (own) | `200` | `113.09` |
+| `BUY-INT-001` | `EXP-2026-0002` (of `BUY-INT-002`) | `403` | `8.99` |
+
+The request for an unknown batch code (`404`) left no row.
+
+## 6.6 Verification {/* #65-verification */}
 
 The API CI (`.github/workflows/ci.yml`) starts a `postgis/postgis:16-3.4-alpine`
 service, runs `alembic upgrade head` on a test database and executes the RLS
