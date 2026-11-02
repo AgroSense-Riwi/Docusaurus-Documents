@@ -13,7 +13,7 @@ feat/AGRO-123-...  ──PR──▶  dev  ──PR──▶  main
 - Feature branches are created from `dev` and merged back into `dev` through a Pull Request.
 - `dev` is promoted to `main` only through a Pull Request.
 - In the **API** and **Database-seed** repositories, `main` is protected: a Pull Request is required, and force pushes and branch deletion are not allowed.
-- As of 2026-11-02, `main` has been updated from `dev` only in the **API** repository. The first promotion ([API PR #23](https://github.com/AgroSense-Riwi/API/pull/23)) was merged with `-s ours --allow-unrelated-histories` because `main` and `dev` had no common history; since then `dev` → `main` is a normal PR. In Database-seed, `main` has not been updated from `dev` yet.
+- As of 2026-11-02, `main` has been updated from `dev` in the **API** and **Database-seed** repositories (not yet in Docusaurus-Documents). The first promotion ([API PR #23](https://github.com/AgroSense-Riwi/API/pull/23)) was merged with `-s ours --allow-unrelated-histories` because `main` and `dev` had no common history; since then `dev` → `main` is a normal PR. In Database-seed, the first promotion ([PR #5](https://github.com/AgroSense-Riwi/Database-seed/pull/5)) was a normal merge, because `main` only had the initial commit.
 
 ---
 
