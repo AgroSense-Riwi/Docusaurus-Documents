@@ -4,20 +4,25 @@ In this document, we define the complete schema design, relational tables (3NF),
 
 ---
 
-## Implementation Status (as of 2026-10-31)
+## Implementation Status (as of 2026-11-02) {/* #implementation-status-as-of-2026-10-31 */}
 
-This document describes the **target** schema (24 operational tables). The schema actually created in the database today is defined by the API Alembic migrations on the `dev` branch:
+This document describes the **target** schema (24 operational tables). The schema actually created in the database today is defined by the API Alembic migrations in `apps/api/migrations/versions/` (same on `dev` and `main`). **14 tables** are implemented and 10 are planned. The migrations, in order (head `f3b8c1d4a6e2`, applied on the EC2 database on 2026-11-02):
 
-- `927ccb53d091` (*"Esquema inicial trazabilidad 13 tablas"*): creates the 13 tables marked **Implemented** below.
-- `c1a8f93e2b45`: adds row-level security policies on top of that schema (documented separately).
-
-**Merged into `dev` (2026-11-02) — [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)** adds four migrations: `a3f1c9d2e7b4` (buyer API credentials), `c8e2a7d5f0b1` (user login credentials), `b7d4e2f9a1c3` (deny-by-default RLS, see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3)) and `e5a9b3c7d1f2` (table `forest_reserves`, column `farms.geom` and trigger `trg_check_farm_forest_overlap`). Once merged, 14 tables will be implemented.
+| Order | Migration | Change |
+| --- | --- | --- |
+| 1 | `927ccb53d091` (*"Esquema inicial trazabilidad 13 tablas"*) | Creates the 13 initial tables marked **Implemented** below (all except `forest_reserves`). |
+| 2 | `c1a8f93e2b45` | Row-level security policies for buyer isolation. |
+| 3 | `a3f1c9d2e7b4` | `international_buyers.api_key_hash` (Argon2) and `is_active` ([API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)). |
+| 4 | `c8e2a7d5f0b1` | `users.email` (unique), `password_hash` and `is_active` (API PR #20). |
+| 5 | `b7d4e2f9a1c3` | Deny-by-default RLS with `FORCE ROW LEVEL SECURITY`; see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3) (API PR #20). |
+| 6 | `e5a9b3c7d1f2` | Table `forest_reserves`, column `farms.geom` and trigger `trg_check_farm_forest_overlap`; see [RN-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#64-rn-09-forest-reserves-and-certification-migration-e5a9b3c7d1f2) (API PR #20). |
+| 7 | `f3b8c1d4a6e2` | Function `export_batch_exists` (no table change); see [CA-09](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#63-ca-09-foreign-batch-returns-403-under-rls-migration-f3b8c1d4a6e2) (API PRs #26 and #28). |
 
 | # | Table | Status |
 | --- | --- | --- |
 | 1 | `departments` | Planned |
 | 2 | `municipalities` | Implemented |
-| 3 | `forest_reserves` | Implemented in API PR #20 (merged into `dev`) |
+| 3 | `forest_reserves` | Implemented (migration `e5a9b3c7d1f2`) |
 | 4 | `farm_reserve_overlaps` | Implemented |
 | 5 | `users` | Implemented |
 | 6 | `producers` | Implemented |
@@ -77,7 +82,7 @@ This layer handles transactional operations, master data, traceability, and low-
 | `polygon_geojson` | `JSONB`        | `NOT NULL`             | Spatial boundary used to detect deforestation/overlap.         |
 | `created_at`      | `TIMESTAMPTZ`  | `NOT NULL`             | Record creation timestamp.                                     |
 
-> **Implementation note — API PR #20 (merged into `dev`):** migration `e5a9b3c7d1f2` creates `forest_reserves` with the polygon in a PostGIS column **`geom`** (`geometry(POLYGON, 4326)`, `NOT NULL`, GIST index) instead of `polygon_geojson`, `municipality_id` nullable, and an extra `updated_at`. See [RN-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#64-rn-09-forest-reserves-and-certification-migration-e5a9b3c7d1f2).
+> **Implementation note — API PR #20 (merged into `dev` and deployed to `staging` on 2026-11-02):** migration `e5a9b3c7d1f2` creates `forest_reserves` with the polygon in a PostGIS column **`geom`** (`geometry(POLYGON, 4326)`, `NOT NULL`, GIST index) instead of `polygon_geojson`, `municipality_id` nullable, and an extra `updated_at`. See [RN-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#64-rn-09-forest-reserves-and-certification-migration-e5a9b3c7d1f2).
 
 #### 4. Table: `farm_reserve_overlaps`
 
@@ -104,7 +109,7 @@ This layer handles transactional operations, master data, traceability, and low-
 | `role`          | `VARCHAR(50)`  | `NOT NULL`         | `AGRONOMIST`, `QUALITY_CHIEF`, `SUSTAINABILITY_COMMITTEE`, `ADMIN`. |
 | `is_active`     | `BOOLEAN`      | `DEFAULT TRUE`     | Account status flag.                                                        |
 
-> **Implementation note — API PR #20 (merged into `dev` on 2026-11-02):** migration `c8e2a7d5f0b1` adds `email` (`VARCHAR(150)`, `UNIQUE`), `password_hash` (`VARCHAR(255)`) and `is_active` (`BOOLEAN NOT NULL`, server default `true`) to `users`. `email` and `password_hash` are **nullable** so the existing seed (which writes only `user_id`, `full_name`, `role`) keeps working; a user without `email`/`password_hash` cannot log in. See [Authentication and RBAC in the API](#authentication-and-rbac-in-the-api-api-pr-20).
+> **Implementation note — API PR #20 (merged into `dev` and deployed to `staging` on 2026-11-02):** migration `c8e2a7d5f0b1` adds `email` (`VARCHAR(150)`, `UNIQUE`), `password_hash` (`VARCHAR(255)`) and `is_active` (`BOOLEAN NOT NULL`, server default `true`) to `users`. `email` and `password_hash` are **nullable** so the existing seed (which writes only `user_id`, `full_name`, `role`) keeps working; a user without `email`/`password_hash` cannot log in. See [Authentication and RBAC in the API](#authentication-and-rbac-in-the-api-api-pr-20).
 
 #### 6. Table: `producers`
 
@@ -127,7 +132,7 @@ This layer handles transactional operations, master data, traceability, and low-
 | `api_key_hash` | `VARCHAR(255)` | `NOT NULL`         | Secret hash managed via Secrets Manager for data isolation (**RN-11**). |
 | `is_active`    | `BOOLEAN`      | `DEFAULT TRUE`     | Access control flag.                                                          |
 
-> **Implementation note — API PR #20 (merged into `dev` on 2026-11-02):** migration `a3f1c9d2e7b4` adds `api_key_hash` (`VARCHAR(255)`, **nullable**) and `is_active` (`BOOLEAN NOT NULL`, server default `true`) to `international_buyers`. `client_id` already existed as `UNIQUE NOT NULL` (`VARCHAR(50)` in the ORM model; the model uses `buyer_name` instead of `company_name`/`country`). `api_key_hash` stores an **Argon2** hash of the buyer's API key (it is not a Secrets Manager reference); a buyer without `api_key_hash` cannot authenticate. See [Authentication and RBAC in the API](#authentication-and-rbac-in-the-api-api-pr-20).
+> **Implementation note — API PR #20 (merged into `dev` and deployed to `staging` on 2026-11-02):** migration `a3f1c9d2e7b4` adds `api_key_hash` (`VARCHAR(255)`, **nullable**) and `is_active` (`BOOLEAN NOT NULL`, server default `true`) to `international_buyers`. `client_id` already existed as `UNIQUE NOT NULL` (`VARCHAR(50)` in the ORM model; the model uses `buyer_name` instead of `company_name`/`country`). `api_key_hash` stores an **Argon2** hash of the buyer's API key (it is not a Secrets Manager reference); a buyer without `api_key_hash` cannot authenticate. See [Authentication and RBAC in the API](#authentication-and-rbac-in-the-api-api-pr-20).
 
 #### 8. Table: `buyer_api_audit_logs`
 
@@ -142,7 +147,7 @@ This layer handles transactional operations, master data, traceability, and low-
 
 #### Authentication and RBAC in the API (API PR #20)
 
-> **Status:** implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **merged into `dev` on 2026-11-02**. Before that PR, `/auth/buyer-token` did not verify an API key and operator tokens did not come from the `users` table.
+> **Status:** implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **merged into `dev` and deployed to `staging` on 2026-11-02**. Before that PR, `/auth/buyer-token` did not verify an API key and operator tokens did not come from the `users` table.
 
 The API issues two independent JWTs (HS256), one for internal operators and one for international buyers:
 
@@ -197,7 +202,7 @@ Authorization (RBAC):
 | `overlaps_reserve`   | `BOOLEAN`       | `DEFAULT FALSE`        | Denormalized flag updated from`farm_reserve_overlaps` (**RN-09**). |
 | `has_valid_coords`   | `BOOLEAN`       | `DEFAULT TRUE`         | `FALSE` if seed injected inverted or out-of-country coordinates.         |
 
-> **Implementation note — API PR #20 (merged into `dev`):** migration `e5a9b3c7d1f2` adds `farms.geom` (`geometry(POLYGON, 4326)`, **nullable**, GIST index). The trigger `trg_check_farm_forest_overlap` recalculates `overlaps_reserve` with `ST_Intersects` against `forest_reserves.geom` whenever `geom` is set. In batch certification, a farm without `geom` is treated as **non-compliant** with RN-09, so the batch is rejected.
+> **Implementation note — API PR #20 (merged into `dev` and deployed to `staging` on 2026-11-02):** migration `e5a9b3c7d1f2` adds `farms.geom` (`geometry(POLYGON, 4326)`, **nullable**, GIST index). The trigger `trg_check_farm_forest_overlap` recalculates `overlaps_reserve` with `ST_Intersects` against `forest_reserves.geom` whenever `geom` is set. In batch certification, a farm without `geom` is treated as **non-compliant** with RN-09, so the batch is rejected.
 
 #### 11. Table: `farm_plots` (Blocks)
 
