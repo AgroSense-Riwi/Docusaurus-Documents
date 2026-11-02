@@ -46,7 +46,7 @@ program topics.
   FastAPI, and Docker on ECS Fargate.
 - **AC-02 (Services Stack):** Full inventory and technical justification
   documented for all 13 core services (FastAPI, PostgreSQL, RabbitMQ,
-  Airflow, PySpark, AWS ECS/Fargate, RDS, S3 Data Lake, S3 Backups, ALB,
+  Airflow, PySpark, AWS ECS/Fargate, EC2 (PostgreSQL + PostGIS), S3 Data Lake, S3 Backups, ALB,
   ECR, CloudWatch, Secrets Manager).
 - **AC-03 (Cost Estimation):** Detailed line-item AWS Pricing Calculator
   cost estimate generated (\$265.45 USD/month Prod vs \$48.00 USD/month
@@ -95,7 +95,7 @@ BI Consumption.*
 
 **Physical AWS Infrastructure Topology:** The physical deployment in AWS
 is hosted within a Virtual Private Cloud (VPC) spanning 2 Availability
-Zones (AZs) in us-east-1, isolating public ingress from backend data
+Zones (AZs) in the us-east-2 (Ohio) region, isolating public ingress from backend data
 stores.
 
 ### Figure 2: AWS VPC Physical Infrastructure Diagram
@@ -103,9 +103,17 @@ stores.
 ![1791376815253](image/1791376815253.png)
 
 *Figure 2 — AWS VPC Network Topology: Public Subnet (ALB, NAT Gateway),
-Private Subnet APPS (ECS Fargate FastAPI, Airflow, PySpark, RabbitMQ
-EC2), Private Subnet DATA (PostgreSQL RDS), and S3 Buckets (Data Lake &
-Database Backups).*
+Private Subnet APPS (ECS Fargate FastAPI, FastConsumer Worker, Airflow,
+PySpark), Private Subnet DATA (RabbitMQ on EC2, PostgreSQL + PostGIS on
+EC2), and S3 Buckets (Data Lake & Database Backups).*
+
+> **Status note (2026-10-31):** Figures 1 and 2 show the target
+> architecture. Of the compute components, only the FastAPI service (ECS
+> Fargate behind the ALB) and the PostgreSQL + PostGIS EC2 instance are
+> deployed today; RabbitMQ, the FastConsumer worker, Airflow and PySpark
+> are not yet deployed, and the "Spark" jobs (Layer 3) are currently
+> implemented as plain Python modules that nothing schedules. See
+> [Current Project Status](../getting-started/current-status.md).
 
 ## Architectural Decision Records (ADRs)
 
@@ -117,6 +125,7 @@ Database Backups).*
 | Alternatives Rejected   | 1\) Amazon RDS: Excessive managed fee surcharge (~$27/mo vs ~$14/mo) without necessity for small-scale pilot. 2) MySQL/MariaDB: Inferior spatial functions. 3) DynamoDB: No native joins or foreign keys. |
 | Consequences & Benefits | Native ST_Intersects and GiST spatial indexing for RN-09. Direct root control over postgresql.conf tuning (shared_buffers, work_mem) and scheduled pg_dump backups directly to S3.       |
 | Validation Criteria     | Automated spatial tests pass (CA-08); p95 traceability query response ≤ 500 ms (RNF-03).                                                                                                 |
+| Current Implementation (2026-10-31) | EC2 instance `agrosense-db-server` runs as **t3.micro** (not t4g.small / t3.small) and is intentionally stopped to save AWS credits. The cost figures below still use the t4g.small / t3.small assumption. |
 
 ### ADR-002: Traceability REST API Framework — FastAPI + Pydantic + SQLAlchemy
 
@@ -143,21 +152,26 @@ incorporates 13 core AWS and open-source services, mapped directly to
 the 19 required program topics and business rules of the project
 statement.
 
-| **Service / Technology** | **AWS / Open Source Component** | **Project Role & Business Rule**                     | **Initial Sizing Assumption**           |
-| :----------------------------- | :------------------------------------ | :--------------------------------------------------------- | :-------------------------------------------- |
-| FastAPI                        | AWS ECS Fargate (x86)                 | Commercial Traceability REST API (RF-06, RN-11, RNF-03)    | 2 tasks, 0.5 vCPU, 1 GB RAM 24/7              |
-| PostgreSQL + PostGIS           | Amazon EC2 (t4g.small / t3.small)     | Operational DB, farms, polygons, lots (F5, RN-08, RN-09)   | 1 EC2 instance, 30 GB gp3 EBS (Tutor Optimized)|
-| RabbitMQ                       | Amazon EC2 (t3.small)                 | IoT telemetry buffer (F4, RF-01, RNF-01)                   | 1 t3.small instance, 20 GB EBS                |
-| Apache Airflow (Optimized)     | AWS ECS Fargate (1 task LocalExecutor)| Satellite weather ETL & alert orchestrator (RF-02, RNF-05) | 1 task (0.5 vCPU, 2GB RAM) / Scheduled RunTask|
-| Apache PySpark                 | AWS ECS Fargate (On-Demand)           | Batch ETL, rust/drought windows (RF-03, RN-03..RN-07)      | 1 task, 2 vCPU, 16 GB RAM (1 hr/day)          |
-| AWS Lambda                     | Serverless Compute                    | IoT message consumer writing raw JSON to S3 Bronze         | 4,000,000 requests/month (512 MB)             |
-| Amazon S3                      | Data Lake & Backups                   | Bronze/Silver/Gold Parquet Data Lake & DB Backups          | 50 GB Data Lake + 30 GB Backups Standard      |
-| App Load Balancer              | AWS ALB                               | Public ingress, TLS termination & health checks            | 1 ALB, 3 Public IPv4s, 1 NAT Gateway          |
-| Amazon ECR                     | Private Container Registry            | Private Docker image repository with lifecycle policies    | 3 GB image storage (10 versions)              |
-| Amazon CloudWatch              | Observability & Alarms                | Logs, metrics, queue depth & ALB 5xx alarms                | 5 GB ingested logs, 10 metric alarms          |
-| Secrets Manager                | Security & Identity                   | Database credentials & API keys management (CT-02)         | 6 secrets, 10,000 API calls/month             |
-| NAT Gateway                    | AWS VPC Networking                    | Outbound internet access for satellite APIs (F2, F3)       | 1 regional NAT Gateway (us-east-1)            |
-| Power BI                       | External Analytics                    | Executive dashboards for agronomic health & sustainability | Direct connection to EC2 DB / Gold S3         |
+| **Service / Technology** | **AWS / Open Source Component** | **Project Role & Business Rule**                     | **Initial Sizing Assumption**           | **Deployment Status (2026-10-31)** |
+| :----------------------------- | :------------------------------------ | :--------------------------------------------------------- | :-------------------------------------------- | :--------------------------------- |
+| FastAPI                        | AWS ECS Fargate (x86)                 | Commercial Traceability REST API (RF-06, RN-11, RNF-03)    | 2 tasks, 0.5 vCPU, 1 GB RAM 24/7              | Deployed as ECS service `agrosense-api-service` (behind ALB, HTTP port 80); cannot start while the DB instance is stopped |
+| PostgreSQL + PostGIS           | Amazon EC2 (t4g.small / t3.small)     | Operational DB, farms, polygons, lots (F5, RN-08, RN-09)   | 1 EC2 instance, 30 GB gp3 EBS (Tutor Optimized)| EC2 `agrosense-db-server`, **t3.micro**; intentionally stopped to save AWS credits |
+| RabbitMQ                       | Amazon EC2 (t3.small)                 | IoT telemetry buffer (F4, RF-01, RNF-01)                   | 1 t3.small instance, 20 GB EBS                | Not yet deployed |
+| Apache Airflow (Optimized)     | AWS ECS Fargate (1 task LocalExecutor)| Satellite weather ETL & alert orchestrator (RF-02, RNF-05) | 1 task (0.5 vCPU, 2GB RAM) / Scheduled RunTask| Not yet deployed (task definition exists in the API repo but is not registered) |
+| Apache PySpark                 | AWS ECS Fargate (On-Demand)           | Batch ETL, rust/drought windows (RF-03, RN-03..RN-07)      | 1 task, 2 vCPU, 16 GB RAM (1 hr/day)          | Not yet deployed; jobs are currently plain Python modules, not scheduled |
+| FastConsumer Worker (AGRO-16)  | AWS ECS Fargate (Co-located/Worker)   | IoT RabbitMQ consumer writing raw Parquet to S3 Medallion   | Ingestion tasks (0.5 vCPU, 1 GB RAM / co-located) | Not yet deployed (depends on RabbitMQ) |
+| Amazon S3                      | Data Lake & Backups                   | Bronze/Silver/Gold Parquet Data Lake & DB Backups          | 50 GB Data Lake + 30 GB Backups Standard      | Not reviewed |
+| App Load Balancer              | AWS ALB                               | Public ingress, TLS termination & health checks            | 1 ALB, 3 Public IPv4s, 1 NAT Gateway          | Deployed, HTTP only (port 80) — no TLS listener yet |
+| Amazon ECR                     | Private Container Registry            | Private Docker image repository with lifecycle policies    | 3 GB image storage (10 versions)              | Not reviewed |
+| Amazon CloudWatch              | Observability & Alarms                | Logs, metrics, queue depth & ALB 5xx alarms                | 5 GB ingested logs, 10 metric alarms          | Not reviewed |
+| Secrets Manager                | Security & Identity                   | Database credentials & API keys management (CT-02)         | 6 secrets, 10,000 API calls/month             | Not reviewed |
+| NAT Gateway                    | AWS VPC Networking                    | Outbound internet access for satellite APIs (F2, F3)       | 1 regional NAT Gateway (us-east-2)            | Not reviewed |
+| Power BI                       | External Analytics                    | Executive dashboards for agronomic health & sustainability | Direct connection to EC2 DB / Gold S3         | Not reviewed |
+
+The status column reflects the AWS account review of 2026-10-31; see
+[Current Project Status](../getting-started/current-status.md). "Not
+reviewed" means the item was not part of that review, not that it is
+missing.
 
 # 4. AC-03: Infrastructure Cost Estimation & Financial Evaluation
 
@@ -169,13 +183,13 @@ estimate was generated using the official AWS Pricing Calculator
 | \# AWS Service Line\*\*       | **Configuration Summary**        | **Dev Cost (USD)** | **Prod Cost (USD)** | \*\*12-Mo Total |
 | :---------------------------- | :------------------------------------- | :----------------------- | :------------------------ | :-------------- |
 | Public IPv4 Addresses         | 3 Public IPv4 addresses in use         | \$3.65                   | \$10.95                   | \$131.40        |
-| NAT Gateway                   | 1 Regional NAT Gateway (us-east-1)     | \$11.25                  | \$33.75                   | \$405.00        |
+| NAT Gateway                   | 1 Regional NAT Gateway (us-east-2)     | \$11.25                  | \$33.75                   | \$405.00        |
 | Application Load Balancer     | 1 ALB with LCU processing              | \$8.00                   | \$16.66                   | \$199.92        |
 | FastAPI (AWS Fargate)         | 2 tasks, 1 GB RAM, 20 GB storage       | \$12.01                  | \$36.04                   | \$432.48        |
 | Apache Airflow (Fargate Opt.) | 1 task (LocalExecutor, 0.5vCPU, 2GB)   | \$6.00                   | \$18.00                   | \$216.00        |
 | Apache PySpark (Fargate)      | 1 task/day, 1 hr, 16 GB RAM            | \$2.36                   | \$7.09                    | \$85.08         |
 | RabbitMQ (Amazon EC2)         | 1 t3.small instance, 20 GB EBS         | \$6.80                   | \$16.78                   | \$201.41        |
-| AWS Lambda                    | 4M invocations/mo, 512 MB RAM          | \$0.20                   | \$0.60                    | \$7.20          |
+| FastConsumer Worker (AGRO-16) | Co-located in API Fargate Task / 0.5 vCPU | Included in API          | Included in API           | $0.00           |
 | PostgreSQL + PostGIS (EC2)    | 1 t4g.small / t3.small, 30 GB gp3 EBS  | \$8.10                   | \$14.20                   | \$170.40        |
 | Data Lake (S3 Standard)       | 50 GB storage, 100k GET/PUTs           | \$0.85                   | \$1.69                    | \$20.28         |
 | S3 Database Backups           | 30 GB storage Standard                 | \$0.35                   | \$0.69                    | \$8.28          |
@@ -183,6 +197,16 @@ estimate was generated using the official AWS Pricing Calculator
 | Amazon CloudWatch             | 5 GB logs, 10 metric alarms            | \$2.00                   | \$3.52                    | \$42.27         |
 | AWS Secrets Manager           | 6 secrets, 10k API requests            | \$2.45                   | \$2.45                    | \$29.40         |
 | \# TOTAL MONTHLY ESTIMATE\*\* | **Tutor-Optimized Architecture**       | **\$64.32**              | **\$162.72**              | \*\*\$1,952.64  |
+
+:::note Estimate vs. current deployment (2026-10-31)
+
+This table is the design-time estimate and has not been recalculated. As
+of 2026-10-31 the Airflow, PySpark, RabbitMQ and FastConsumer lines are
+**not yet deployed**, and the PostgreSQL EC2 instance actually used is a
+**t3.micro** (currently stopped). See
+[Current Project Status](../getting-started/current-status.md).
+
+:::
 
 ## 4.1 Minimum Viable Cost Scenario (~\$35.00 USD/month) — Deliverable E-15
 
@@ -199,7 +223,7 @@ specific cost-saving levers:
   provision upon DAG execution and destroy immediately upon completion
   (15 min/day duration).
 - **3. ARM Graviton2 Instances:** Adoption of Graviton2 ARM instances
-  (db.t4g.small) providing a 20% price-performance gain over x86.
+  (EC2 t4g.small for PostgreSQL + PostGIS) providing a 20% price-performance gain over x86.
 - **4. 100% Local Containerized Environment:** Consolidating local
   development onto Docker Compose, generating \$0.00 cloud cost during
   development phases.
@@ -214,7 +238,7 @@ and Sprint 2, fully estimated in Story Points and assigned in Jira.
 | :-------------- | :--------------------------------------------------------- | :-------------------------------- | :----- | :----------- |
 | AGRO-01         | End-to-End Logical Architecture & Base ADRs Registration   | Architecture & ADRs (E-01)        | 4      | LL           |
 | AGRO-02         | Git Repository Setup, Code Standards & Onboarding Protocol | Governance & CI/CD (E-02)         | 1      | LL           |
-| AGRO-03A        | Relational Data Model Design & PostGIS Schema Definition   | PostgreSQL RDS / PostGIS (E-01)   | 4      | S            |
+| AGRO-03A        | Relational Data Model Design & PostGIS Schema Definition   | PostgreSQL on EC2 / PostGIS (E-01)| 4      | S            |
 | AGRO-04A        | Data Seed Strategy, Defect Profiling & Synthetic Blueprint | Seed Data Generator (E-03)        | 3      | KM           |
 | AGRO-05A        | Multi-Container Local Environment Architecture & Compose   | Docker Compose Stack (E-04)       | 2      | KM           |
 | AGRO-05B        | Multi-Container Local Environment Integration Testing      | Local Stack / Healthchecks (E-04) | 3      | KM           |

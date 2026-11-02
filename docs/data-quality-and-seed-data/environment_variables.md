@@ -87,12 +87,14 @@ Required connection parameters injected via environment variables:
 
 | Environment Variable    | Type       | Example (Local Docker)                | Description                                                    |
 | :---------------------- | :--------- | :------------------------------------ | :------------------------------------------------------------- |
-| `POSTGRES_HOST`       | `STRING` | `postgres-db` / `localhost`       | Database hostname or AWS RDS endpoint.                         |
+| `POSTGRES_HOST`       | `STRING` | `postgres-db` / `localhost`       | Database hostname or private address of the EC2 PostgreSQL host. |
 | `POSTGRES_PORT`       | `INT`    | `5432`                              | PostgreSQL port.                                               |
 | `POSTGRES_DB`         | `STRING` | `agrosense_db`                      | Target operational database name.                              |
 | `POSTGRES_USER`       | `STRING` | `agrosense_user`                    | Database username with write privileges.                       |
 | `POSTGRES_PASSWORD`   | `STRING` | *(Injected via `.env` / Secrets)* | Database password (Never committed to Git —**CT-02**).  |
 | `BRONZE_LANDING_PATH` | `STRING` | `./data/bronze` or `s3://...`     | Destination URI for simulated raw files (IoT JSONs, Lab CSVs). |
+
+> **Database role for the seed — API PR #20 (pending merge, not yet in `dev`):** that PR enables `FORCE ROW LEVEL SECURITY` on `export_batches` and `buyer_batch_contracts` and moves the API to a separate, non-owner role `agrosense_app`. The seed (like Alembic) must keep connecting as the **table owner** (`POSTGRES_USER`, superuser in Docker; superuser or `BYPASSRLS` on EC2), not as `agrosense_app`. The API-side variables introduced by the PR (`AGROSENSE_APP_DB_PASSWORD`, auth hashes, RabbitMQ vhost URL) are listed in [Local Environment Workflow](../getting-started/local-environment-workflow-agrosense.md#api-authentication-and-credentials-api-pr-20).
 
 ---
 

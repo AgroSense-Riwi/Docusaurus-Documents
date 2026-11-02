@@ -217,3 +217,168 @@ and RN-11, automated integration tests perform the following assertions:
 > Buyer A with 'SET LOCAL app.current_buyer_id = 'BUYER-A'' returns zero
 > rows for lots owned by Buyer B, satisfying REST API latency and
 > security requirements (RNF-03).
+
+# 6. Implementation in the API (API PR #20)
+
+> **Status:** the behavior below is implemented in
+> [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch
+> `fix/security-and-functionality`), **pending merge — not yet in `dev`**.
+> Sections 2–5 above are the design specification; the real tables use the
+> English names of the [Dataset & Database Structure](../architecture-and-design/data_structure.md)
+> (`export_batches`, `buyer_batch_contracts`, `farms`, `forest_reserves`).
+
+## 6.1 RN-11: Row-Level Security policies (migration `b7d4e2f9a1c3`)
+
+Migration `b7d4e2f9a1c3` drops the policies created by `c1a8f93e2b45`,
+which exposed **all rows** whenever `app.current_buyer_id` was empty, and
+replaces them with deny-by-default policies:
+
+```sql
+-- RLS enabled and forced (also applies to the table owner unless it is
+-- superuser or has BYPASSRLS)
+ALTER TABLE buyer_batch_contracts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE buyer_batch_contracts FORCE ROW LEVEL SECURITY;
+ALTER TABLE export_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE export_batches FORCE ROW LEVEL SECURITY;
+
+-- Buyer path (SELECT only): no session variable -> zero rows
+CREATE POLICY rls_buyer_batch_contracts_buyer_select ON buyer_batch_contracts
+FOR SELECT
+USING (buyer_id = NULLIF(current_setting('app.current_buyer_id', true), '')::uuid);
+
+CREATE POLICY rls_export_batches_buyer_select ON export_batches
+FOR SELECT
+USING (
+    EXISTS (
+        SELECT 1
+        FROM buyer_batch_contracts c
+        WHERE c.batch_id = export_batches.batch_id
+          AND c.buyer_id = NULLIF(current_setting('app.current_buyer_id', true), '')::uuid
+    )
+);
+
+-- Explicit internal-operator path (ALL commands)
+CREATE POLICY rls_buyer_batch_contracts_operator_all ON buyer_batch_contracts
+FOR ALL
+USING (current_setting('app.current_role', true) = 'operator')
+WITH CHECK (current_setting('app.current_role', true) = 'operator');
+
+CREATE POLICY rls_export_batches_operator_all ON export_batches
+FOR ALL
+USING (current_setting('app.current_role', true) = 'operator')
+WITH CHECK (current_setting('app.current_role', true) = 'operator');
+```
+
+How the API sets the context (`db/session.py`, `api/v1/dependencies.py`):
+
+- **Buyer requests:** the `get_buyer_db` dependency validates the buyer JWT
+  and then runs `SELECT set_config('app.current_buyer_id', :buyer_id, true)`,
+  which is equivalent to `SET LOCAL app.current_buyer_id`. The value lives
+  only for the current transaction and disappears when the session closes,
+  so pooled connections are returned clean. The traceability service also
+  filters by `buyer_id` explicitly (double barrier).
+- **Operator requests:** the `get_operator_db(*roles)` dependency first
+  validates the operator JWT and role, and only then runs
+  `SELECT set_config('app.current_role', 'operator', true)`. In PR #20 this
+  dependency exists but no HTTP endpoint uses it yet.
+- On non-PostgreSQL databases the API does not set any RLS context.
+
+## 6.2 Application database role `agrosense_app`
+
+RLS is only effective if the API does not connect as the table owner or a
+superuser. PR #20 therefore separates the roles:
+
+| Role | Used by | Properties |
+| :-- | :-- | :-- |
+| Table owner (`POSTGRES_USER` locally) | Alembic migrations (`DATABASE_URL`) and the seed | Superuser in Docker; on EC2 it must be superuser or have `BYPASSRLS`, otherwise Alembic and the seed cannot write with `FORCE ROW LEVEL SECURITY` active. |
+| `agrosense_app` | The API at runtime (`AGROSENSE_DATABASE_URL`) | `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS`, **not** owner of the tables; `SELECT, INSERT, UPDATE, DELETE` on tables and `USAGE, SELECT` on sequences of schema `public`. |
+
+If `agrosense_app` already exists when the migration runs, `b7d4e2f9a1c3`
+grants it DML privileges on the existing tables.
+
+- **Local Docker:** `infra/docker/postgres/init/02-create-app-role.sh`
+  creates the role with the password from `AGROSENSE_APP_DB_PASSWORD` and
+  sets default privileges for tables created later by the owner. It runs
+  only when the data volume is initialized, so an existing volume must be
+  recreated with `docker compose down -v`.
+- **EC2 PostgreSQL (manual step):** run `infra/aws/ec2-postgres-app-role.sql`
+  once, as superuser (or as the table owner with `CREATEROLE`), **before**
+  deploying the API version that uses `agrosense_app`:
+
+  ```bash
+  psql "host=<EC2_HOST> dbname=agrosense_db user=<SUPERUSER>" \
+       -v app_password="$(openssl rand -base64 32)" \
+       -v db_name=agrosense_db \
+       -v owner_role=<TABLE_OWNER_ROLE> \
+       -f infra/aws/ec2-postgres-app-role.sql
+  ```
+
+  Then: store `postgresql+asyncpg://agrosense_app:<pass>@<host>:5432/agrosense_db`
+  in the secret `agrosense/prod/database-url` (`AGROSENSE_DATABASE_URL`);
+  keep `agrosense/prod/database-url-sync` (`DATABASE_URL`, Alembic) with the
+  owner role; and, if the owner role is not a superuser, run
+  `ALTER ROLE <TABLE_OWNER_ROLE> BYPASSRLS;` as superuser. The script ends
+  with a verification query that must return `rolsuper = f` and
+  `rolbypassrls = f` for `agrosense_app`.
+
+## 6.3 Deviation from the specification: foreign batch returns 404
+
+The design (and **CA-09**) expects `403 Forbidden` when a buyer requests a
+batch that belongs to another buyer. With the PR #20 policies, PostgreSQL
+hides that batch from the buyer's session, so
+`GET /api/v1/traceability/{batch_code}` returns **`404 Not Found`** (the
+batch does not exist from the buyer's point of view). The `403` branch in the
+service is only reachable when no RLS context applies (non-PostgreSQL
+database).
+
+## 6.4 RN-09: forest reserves and certification (migration `e5a9b3c7d1f2`)
+
+Migration `e5a9b3c7d1f2` adds the spatial support for RN-09:
+
+- New table **`forest_reserves`**: `reserve_id` (`UUID`, PK, `gen_random_uuid()`),
+  `municipality_id` (`INT`, nullable, FK → `municipalities`), `name`
+  (`VARCHAR(150)`, `NOT NULL`), `geom` (`geometry(POLYGON, 4326)`, `NOT NULL`),
+  `created_at`, `updated_at`; GIST index `idx_forest_reserves_geom`. The
+  polygon column is `geom`, **not** `polygon_geojson` as in the
+  [table specification](../architecture-and-design/data_structure.md).
+- New column **`farms.geom`** (`geometry(POLYGON, 4326)`, **nullable** so the
+  current seed keeps working) with GIST index `idx_farms_geom`.
+- Function `update_farm_forest_overlap()` and trigger
+  **`trg_check_farm_forest_overlap`** (`BEFORE INSERT OR UPDATE OF geom, overlaps_reserve ON farms`):
+  when `NEW.geom` is not null, it sets `NEW.overlaps_reserve` to
+  `EXISTS (SELECT 1 FROM forest_reserves rf WHERE ST_Intersects(NEW.geom, rf.geom))`.
+  When `geom` is null, the received value is kept.
+- If the role `agrosense_app` exists, it receives DML privileges on
+  `forest_reserves`.
+
+The certification guard trigger of section 3
+(`enforce_zero_deforestation_certification`) is **not** implemented as a
+trigger. Instead, the API service `services/certification_engine.py`
+evaluates each batch in Python with data read from PostGIS:
+
+1. **RN-08:** the sum of `contributed_kg` of the batch compositions must
+   equal `total_weight_kg` (tolerance 0.01 kg); every contribution must be
+   greater than 0.
+2. **RN-09:** for each origin farm, a query computes
+   `ST_Intersects(farms.geom, forest_reserves.geom)` and the overlap area
+   (`ST_Area(ST_Intersection(...)::geography) / 10000`, in hectares). A farm
+   counts as overlapping if the spatial test is positive, if
+   `farms.overlaps_reserve` is `true`, or if it has rows in
+   `farm_reserve_overlaps`.
+3. **Missing geometry is never compliant:** a farm without `geom`, a farm
+   that does not exist, or a composition without `farm_id` is reported as
+   "without geometry or spatial evaluation" and the batch is **rejected**.
+4. Result: `CERTIFICADO` if there are no rejection reasons, otherwise
+   `RECHAZADO` (states `EN_PROCESO`, `CERTIFICADO`, `RECHAZADO`).
+
+`evaluate_batch_certification(session, batch_id)` reads `export_batches`,
+which is protected by RLS, so it needs a session with the operator context
+(`get_operator_db`). In PR #20 no HTTP endpoint calls this function yet.
+
+## 6.5 Verification
+
+The API CI (`.github/workflows/ci.yml`) starts a `postgis/postgis:16-3.4-alpine`
+service, runs `alembic upgrade head` on a test database and executes the RLS
+tests (Buyer A vs Buyer B), the PostGIS RN-09 tests and the migration tests. According to the PR, these
+tests had never been run locally and are validated for the first time in the
+CI of PR #20.

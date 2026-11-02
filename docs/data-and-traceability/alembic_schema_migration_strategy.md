@@ -8,8 +8,8 @@ Schema Evolution in PostgreSQL
 The database migration framework for AgroSense Café is built on
 **Alembic** integrated with **SQLAlchemy 2.0**. This provides
 deterministic, version-controlled DDL execution across local Docker
-environments, CI/CD pipelines, and AWS RDS PostgreSQL production
-instances.
+environments, CI/CD pipelines, and the production PostgreSQL + PostGIS
+instance on Amazon EC2 (us-east-2).
 
 |                                                                        |
 |:-----------------------------------------------------------------------|

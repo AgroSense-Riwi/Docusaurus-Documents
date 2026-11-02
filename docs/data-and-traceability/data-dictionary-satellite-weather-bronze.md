@@ -7,6 +7,8 @@
 
 Este documento detalla la estructura y el significado de los parámetros de los JSONs generados por el DAG `dag_satellite_ingestion` para facilitar su consumo en los Spark Jobs, modelos agronómicos (Roya, Sequía, Lluvia extrema) y dashboards.
 
+> **Estado (2026-10-31):** Airflow aún no está desplegado en AWS. Los "Spark Jobs" están implementados actualmente como módulos Python (sin `pyspark`) y ningún proceso los programa todavía. Ver [Current Project Status](../getting-started/current-status.md).
+
 ---
 
 ## 1. Estructura Común del Envoltorio (Root Metadata)

@@ -64,8 +64,8 @@ conditions during database schema initialization:
     Upstream services wait until health status reaches 'healthy'.
 
 3.  **Stage 3: Database Migrations & Seed Trigger:** An ephemeral init
-    container executes Alembic database migrations followed by python
-    scripts/seed/run_seed.py --mode dev --seed 42, populating 50 farms
+    container executes Alembic database migrations followed by
+    `python -m seed --mode dev --seed 42`, populating 130 farms
     and simulated IoT data idempotently (CT-06).
 
 4.  **Stage 4: Application & Orchestration Services:** FastAPI (web
@@ -110,6 +110,62 @@ volumes using the -v flag:
 | the baseline state.                                                   |
 
 
+## API Authentication and Credentials (API PR #20)
+
+> **Status:** applies to [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)
+> (branch `fix/security-and-functionality`), **pending merge — not yet in
+> `dev`**. Values below come from the API repository `.env.example` on that
+> branch; `changeme` placeholders are for local development only.
+
+### New and changed variables in `.env`
+
+| Variable | Used by | Purpose |
+|:--|:--|:--|
+| `AGROSENSE_APP_DB_PASSWORD` | `db` (init script) | Password of the application role `agrosense_app`, created by `infra/docker/postgres/init/02-create-app-role.sh`. Required. |
+| `AGROSENSE_DATABASE_URL` | `api` | Now connects as `agrosense_app` (not the table owner), so row-level security applies: `postgresql+asyncpg://agrosense_app:<password>@db:5432/agrosense_db`. |
+| `DATABASE_URL` | `api` entrypoint (Alembic), seed | Still the owner role (`POSTGRES_USER`). |
+| `RABBITMQ_DEFAULT_VHOST` | `broker` | `/agrosense`. |
+| `AGROSENSE_RABBITMQ_URL` | `api`, `telemetry-consumer`, `simulators` | Must include the vhost: `amqp://agrosense_mq:<password>@broker:5672/%2Fagrosense`. |
+| `AGROSENSE_JWT_SECRET_KEY`, `AGROSENSE_BUYER_JWT_SECRET_KEY` | `api` | Operator and buyer JWT signing secrets, at least 32 characters each. Generate real values with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. |
+| `AGROSENSE_AUTH_USERNAME`, `AGROSENSE_AUTH_PASSWORD_HASH` | `api` | Optional bootstrap operator for `POST /api/v1/auth/token` (always role `ADMIN`). The hash is Argon2. With the `changeme` placeholder the API starts but the bootstrap login returns `401`. |
+| `AIRFLOW_ADMIN_USER`, `AIRFLOW_ADMIN_PASSWORD` | Airflow | Real login for the Airflow UI (`http://localhost:8080`); `SIMPLE_AUTH_MANAGER_ALL_ADMINS` is now `false`. |
+| `AIRFLOW__CORE__FERNET_KEY`, `AIRFLOW__WEBSERVER__SECRET_KEY` | Airflow | Required. Generate a Fernet key with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `AGROSENSE_TELEMETRY_CONSUMER_PREFETCH` | `telemetry-consumer` | Optional; unacknowledged messages held at once (default `50`). |
+
+### Generating password and API key hashes
+
+The API ships a small CLI (`agrosense_api.cli`) that never stores secrets:
+
+```bash
+# Argon2 hash of a password (prompts without echo, or reads one line from stdin)
+docker compose run --rm --no-deps --entrypoint python api -m agrosense_api.cli hash-secret
+# equivalent outside Docker:
+uv run python -m agrosense_api.cli hash-secret
+
+# New buyer API key + its Argon2 hash
+uv run python -m agrosense_api.cli new-buyer-key
+```
+
+- Paste the bootstrap hash into `.env` **between single quotes**, because it contains `$`:
+  `AGROSENSE_AUTH_PASSWORD_HASH='$argon2id$v=19$m=65536,t=3,p=4$...'`.
+- `new-buyer-key` prints the `api_key` (deliver it to the buyer through a secure channel; it is not shown again) and the `api_key_hash` to store in `international_buyers.api_key_hash`.
+- Internal users authenticate with `users.email` + `users.password_hash` (hash from `hash-secret`) and need `is_active = true`. Users and buyers created by the current seed have no credentials, so they cannot log in until these columns are filled.
+
+### Reset required after pulling PR #20
+
+The `agrosense_app` role is created only when the PostgreSQL volume is
+initialized, and the `/agrosense` vhost only when the RabbitMQ volume is
+initialized. An existing local stack must therefore be recreated:
+
+```powershell
+docker compose down -v
+docker compose --env-file .env up -d --build
+```
+
+`docker compose down -v` deletes the local database, queues and Airflow
+metadata (see the warning in §3.2). PR #20 also adds the
+`telemetry-consumer` service to the stack.
+
 ## 4. Developer Commands Reference Table
 
 The following reference table summarizes standard commands for local
@@ -140,8 +196,8 @@ minutes following this checklist:
   at http://localhost:8000/docs; Airflow UI accessible at
   http://localhost:8080.
 
-- **Seed Verification Query:** Executed 'SELECT COUNT(\*) FROM finca;'
-  returning exactly 50 records in development mode (CT-06).
+- **Seed Verification Query:** Executed 'SELECT COUNT(\*) FROM farms;'
+  returning exactly 130 records in development mode (CT-06).
 
 - **Teardown Validation:** Executed 'docker compose down -v' and
   confirmed complete cleanup of local resources.

@@ -13,6 +13,12 @@ PySpark ETL jobs) eliminate local emulation layers, utilizing the
 official AWS SDK (boto3) and PySpark S3A connectors authenticated via
 AWS environment credentials stored in the local **.env** file.
 
+> **Status note (2026-10-31):** The "Spark" ETL jobs (API
+> `pipelines/spark_jobs/` and `services/*_spark.py`) are currently
+> implemented as plain Python modules; `pyspark` is not a project
+> dependency and nothing schedules these jobs yet. See
+> [Current Project Status](../getting-started/current-status.md).
+
 - **Data Lake Bucket (agrosense-datalake-prod):** Stores raw IoT
   telemetry, satellite climate metrics from NASA POWER/Open-Meteo, and
   curated Parquet tables across Bronze, Silver, and Gold layers.
@@ -115,7 +121,7 @@ services:
       - RABBITMQ_HOST=broker
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-2}
       - S3_DATALAKE_BUCKET=agrosense-datalake-prod
     networks:
       - agrosense_public_subnet

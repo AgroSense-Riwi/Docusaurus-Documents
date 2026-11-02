@@ -4,6 +4,46 @@ In this document, we define the complete schema design, relational tables (3NF),
 
 ---
 
+## Implementation Status (as of 2026-10-31)
+
+This document describes the **target** schema (24 operational tables). The schema actually created in the database today is defined by the API Alembic migrations on the `dev` branch:
+
+- `927ccb53d091` (*"Esquema inicial trazabilidad 13 tablas"*): creates the 13 tables marked **Implemented** below.
+- `c1a8f93e2b45`: adds row-level security policies on top of that schema (documented separately).
+
+**Pending merge — [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)** (branch `fix/security-and-functionality`, not yet in `dev`) adds four migrations: `a3f1c9d2e7b4` (buyer API credentials), `c8e2a7d5f0b1` (user login credentials), `b7d4e2f9a1c3` (deny-by-default RLS, see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3)) and `e5a9b3c7d1f2` (table `forest_reserves`, column `farms.geom` and trigger `trg_check_farm_forest_overlap`). Once merged, 14 tables will be implemented.
+
+| # | Table | Status |
+| --- | --- | --- |
+| 1 | `departments` | Planned |
+| 2 | `municipalities` | Implemented |
+| 3 | `forest_reserves` | Implemented in API PR #20 (pending merge) |
+| 4 | `farm_reserve_overlaps` | Implemented |
+| 5 | `users` | Implemented |
+| 6 | `producers` | Implemented |
+| 7 | `international_buyers` | Implemented |
+| 8 | `buyer_api_audit_logs` | Planned |
+| 9 | `coffee_varieties` | Implemented |
+| 10 | `farms` | Implemented |
+| 11 | `farm_plots` | Implemented |
+| 12 | `sensor_types` | Planned |
+| 13 | `iot_sensors` | Planned |
+| 14 | `sensor_anomalies_log` | Planned |
+| 15 | `crop_nutrient_references` | Planned |
+| 16 | `soil_lab_analyses` | Planned |
+| 17 | `fertilizer_recommendations` | Planned |
+| 18 | `harvest_deliveries` | Implemented |
+| 19 | `export_batches` | Implemented |
+| 20 | `batch_farm_compositions` | Implemented |
+| 21 | `cupping_evaluations` | Implemented |
+| 22 | `buyer_batch_contracts` | Implemented |
+| 23 | `agronomic_alerts` | Planned |
+| 24 | `agronomist_field_visits` | Planned |
+
+"Planned" tables have no Alembic migration yet. Column definitions of implemented tables may differ in detail from this specification; the migration is the source of truth. For the deployment status of the pipelines that feed Parts 2 and 3, see [Current Project Status](../getting-started/current-status.md).
+
+---
+
 ## PART 1: Operational Relational Database (PostgreSQL — 3NF)
 
 This layer handles transactional operations, master data, traceability, and low-latency API queries (p95 at or below 500 ms, **RNF-03**).
@@ -37,6 +77,8 @@ This layer handles transactional operations, master data, traceability, and low-
 | `polygon_geojson` | `JSONB`        | `NOT NULL`             | Spatial boundary used to detect deforestation/overlap.         |
 | `created_at`      | `TIMESTAMPTZ`  | `NOT NULL`             | Record creation timestamp.                                     |
 
+> **Implementation note — API PR #20 (pending merge):** migration `e5a9b3c7d1f2` creates `forest_reserves` with the polygon in a PostGIS column **`geom`** (`geometry(POLYGON, 4326)`, `NOT NULL`, GIST index) instead of `polygon_geojson`, `municipality_id` nullable, and an extra `updated_at`. See [RN-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#64-rn-09-forest-reserves-and-certification-migration-e5a9b3c7d1f2).
+
 #### 4. Table: `farm_reserve_overlaps`
 
 | Column              | Type              | Constraints               | Description / Business Rule                                                |
@@ -62,6 +104,8 @@ This layer handles transactional operations, master data, traceability, and low-
 | `role`          | `VARCHAR(50)`  | `NOT NULL`         | `AGRONOMIST`, `QUALITY_CHIEF`, `SUSTAINABILITY_COMMITTEE`, `ADMIN`. |
 | `is_active`     | `BOOLEAN`      | `DEFAULT TRUE`     | Account status flag.                                                        |
 
+> **Implementation note — API PR #20 (pending merge, not yet in `dev`):** migration `c8e2a7d5f0b1` adds `email` (`VARCHAR(150)`, `UNIQUE`), `password_hash` (`VARCHAR(255)`) and `is_active` (`BOOLEAN NOT NULL`, server default `true`) to `users`. `email` and `password_hash` are **nullable** so the existing seed (which writes only `user_id`, `full_name`, `role`) keeps working; a user without `email`/`password_hash` cannot log in. See [Authentication and RBAC in the API](#authentication-and-rbac-in-the-api-api-pr-20).
+
 #### 6. Table: `producers`
 
 | Column                    | Type             | Constraints          | Description / Business Rule                      |
@@ -83,6 +127,8 @@ This layer handles transactional operations, master data, traceability, and low-
 | `api_key_hash` | `VARCHAR(255)` | `NOT NULL`         | Secret hash managed via Secrets Manager for data isolation (**RN-11**). |
 | `is_active`    | `BOOLEAN`      | `DEFAULT TRUE`     | Access control flag.                                                          |
 
+> **Implementation note — API PR #20 (pending merge, not yet in `dev`):** migration `a3f1c9d2e7b4` adds `api_key_hash` (`VARCHAR(255)`, **nullable**) and `is_active` (`BOOLEAN NOT NULL`, server default `true`) to `international_buyers`. `client_id` already existed as `UNIQUE NOT NULL` (`VARCHAR(50)` in the ORM model; the model uses `buyer_name` instead of `company_name`/`country`). `api_key_hash` stores an **Argon2** hash of the buyer's API key (it is not a Secrets Manager reference); a buyer without `api_key_hash` cannot authenticate. See [Authentication and RBAC in the API](#authentication-and-rbac-in-the-api-api-pr-20).
+
 #### 8. Table: `buyer_api_audit_logs`
 
 | Column               | Type             | Constraints                    | Description / Business Rule                                                |
@@ -93,6 +139,31 @@ This layer handles transactional operations, master data, traceability, and low-
 | `http_status_code` | `INT`          | `NOT NULL`                   | `200` (OK) or `403` (Forbidden — proves **CA-09**).             |
 | `latency_ms`       | `DECIMAL(8,2)` | `NOT NULL`                   | Execution time in ms (monitors p95 at or below 500 ms —**RNF-03**). |
 | `requested_at`     | `TIMESTAMPTZ`  | `NOT NULL`                   | Timestamp of the API request.                                              |
+
+#### Authentication and RBAC in the API (API PR #20)
+
+> **Status:** implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **pending merge — not yet in `dev`**. Before that PR, `/auth/buyer-token` did not verify an API key and operator tokens did not come from the `users` table.
+
+The API issues two independent JWTs (HS256), one for internal operators and one for international buyers:
+
+| Endpoint | Credentials | Verified against | Token issued | Rate limit |
+| :-- | :-- | :-- | :-- | :-- |
+| `POST /api/v1/auth/token` | OAuth2 password form (`username`, `password`) | 1. Optional bootstrap user from `AGROSENSE_AUTH_USERNAME` / `AGROSENSE_AUTH_PASSWORD_HASH` (always receives role `ADMIN`; meant for the first start). 2. Table `users`: `email` (case-insensitive) + Argon2 `password_hash`; the user must have `is_active = true` and one of the four roles of `users.role`. | Signed with `AGROSENSE_JWT_SECRET_KEY`, issuer `agrosense-api`. Claims: `sub` (email), `role` (the user's real role), `scope` (default `lots:read farms:read lots:certify`), `exp`. | 5/minute |
+| `POST /api/v1/auth/buyer-token` | JSON body `{ "client_id": "...", "api_key": "..." }` (**RNF-06**) | Table `international_buyers`: `client_id` + Argon2 `api_key_hash`; the buyer must have `is_active = true`. | Signed with `AGROSENSE_BUYER_JWT_SECRET_KEY`, issuer `agrosense-buyer-auth`. Claims: `sub` and `buyer_id` (the buyer UUID), `role = BUYER`, `scope = traceability:read`, `exp`. | 10/minute |
+
+Behavior common to both endpoints:
+
+- Secrets are verified with **Argon2** (passlib). When the `username`/`client_id` does not exist, a dummy Argon2 verification still runs, so response time does not reveal which identities exist.
+- Wrong credentials, inactive accounts or missing hashes return `401` (`Incorrect username or password` / `Invalid client credentials`). An unset signing secret returns `503`; a database error during login returns `503 Authentication backend is unavailable`.
+- Both signing secrets must be at least 32 characters. Token lifetime is `AGROSENSE_JWT_ACCESS_TOKEN_MINUTES` (default `30`).
+- Hashes are generated with the API CLI (`python -m agrosense_api.cli hash-secret` for passwords, `python -m agrosense_api.cli new-buyer-key` for a new buyer API key and its hash); see [Local Environment Workflow](../getting-started/local-environment-workflow-agrosense.md#api-authentication-and-credentials-api-pr-20).
+
+Authorization (RBAC):
+
+- Operator tokens **must** carry a `role` claim with one of `AGRONOMIST`, `QUALITY_CHIEF`, `SUSTAINABILITY_COMMITTEE`, `ADMIN`; a token without a role, or with an unknown role, is rejected with `401` instead of receiving default privileges. A missing scope returns `403 Insufficient permissions`.
+- Endpoints restricted by role return `403 Operation not permitted for role '<role>'`.
+- `POST /api/v1/telemetry` is restricted to **`ADMIN` and `AGRONOMIST`**. This role assignment is a choice made in PR #20; it is not defined elsewhere in this documentation.
+- Buyer endpoints (`GET /api/v1/traceability/batches`, `GET /api/v1/traceability/{batch_code}`) require a buyer token with a UUID `buyer_id` claim and the `traceability:read` scope, and run their queries under the buyer's row-level security context (see [RN-11 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#61-rn-11-row-level-security-policies-migration-b7d4e2f9a1c3)).
 
 ---
 
@@ -125,6 +196,8 @@ This layer handles transactional operations, master data, traceability, and low-
 | `water_usage_m3_ton` | `DECIMAL(10,2)` | `NOT NULL`             | Water consumption rate per ton of coffee (**RN-10**).                |
 | `overlaps_reserve`   | `BOOLEAN`       | `DEFAULT FALSE`        | Denormalized flag updated from`farm_reserve_overlaps` (**RN-09**). |
 | `has_valid_coords`   | `BOOLEAN`       | `DEFAULT TRUE`         | `FALSE` if seed injected inverted or out-of-country coordinates.         |
+
+> **Implementation note — API PR #20 (pending merge):** migration `e5a9b3c7d1f2` adds `farms.geom` (`geometry(POLYGON, 4326)`, **nullable**, GIST index). The trigger `trg_check_farm_forest_overlap` recalculates `overlaps_reserve` with `ST_Intersects` against `forest_reserves.geom` whenever `geom` is set. In batch certification, a farm without `geom` is treated as **non-compliant** with RN-09, so the batch is rejected.
 
 #### 11. Table: `farm_plots` (Blocks)
 
@@ -334,7 +407,7 @@ These datasets reside in Amazon S3 partitioned by date (`year=YYYY/month=MM/day=
 
 ### Module 2.1: Bronze Layer (Raw Immutable Ingestion — JSON / CSV)
 
-#### 25. Dataset: `s3://.../bronze/iot_telemetry/` (Source F4 — JSON via RabbitMQ & Lambda)
+#### 25. Dataset: `s3://.../bronze/iot_telemetry/` (Source F4 — JSON/Parquet via RabbitMQ & ECS FastConsumer Worker)
 
 * **Columns:** `message_id` (STRING), `batch_upload_id` (STRING), `sensor_id` (STRING), `farm_id` (STRING), `device_timestamp_raw` (STRING), `server_ingestion_ts` (TIMESTAMP), `sensor_type` (STRING), `raw_value` (DOUBLE), `raw_unit` (STRING), `battery_pct` (DOUBLE).
 

@@ -25,8 +25,8 @@ Ensure you have the following tools installed on your system before starting:
 Clone the project and navigate to the root directory:
 
 ```powershell
-git clone https://github.com/Pbyte5/AgroSense-Caf-IoT-Monitoring-and-Traceability-Framework.git
-cd AgroSense-Caf-IoT-Monitoring-and-Traceability-Framework
+git clone https://github.com/AgroSense-Riwi/API.git
+cd API
 ```
 
 ---
@@ -65,11 +65,11 @@ uv run pytest
 
 ### 5. Start a Task (New Branch)
 
-Before starting your work, update your local `main` branch and create a feature branch using the Jira ticket key and a short description in `kebab-case`:
+Day-to-day work branches from and merges back into `dev` (see [Git Workflow](./git_workflow.md) for the full flow). Update your local `dev` branch and create a feature branch using the Jira ticket key and a short description in `kebab-case`:
 
 ```powershell
-# Update local main
-git switch main; git pull
+# Update local dev
+git switch dev; git pull
 
 # Create and switch to the task branch
 git switch -c feat/AGRO-123-add-sensor-endpoint
@@ -124,12 +124,15 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 
 #### Merging Strategy
 
-- **Squash and Merge:** Always use the **Squash and merge** option on GitHub to maintain a clean, linear history on the `main` branch.
+- **Squash and Merge:** Always use the **Squash and merge** option on GitHub to maintain a clean, linear history.
+- **Target branch:** feature PRs target `dev`. `dev` is promoted to `main` only through a Pull Request.
+- **Protected `main`:** in the API and Database-seed repositories, `main` requires a Pull Request and does not allow force pushes or deletion.
 
 ---
 
 ### 8. Release Flow
 
-- **Continuous Deployment (Staging/Dev):** Every merge into the `main` branch is automatically deployed to the Staging/Development environment via CI/CD pipelines.
-- **Production Release:** Production deployments are triggered by creating a Git Release Tag directly from `main`.
+- **Current state (2026-10-31):** the API deploy workflow (`.github/workflows/deploy-ecs.yml`) is currently triggered by a push to `main` or `dev` (or manually). `main` has not yet been updated from `dev` in any repository.
+- **Planned production release:** production deployments triggered by a Git Release Tag created from `main`.
 - **Version format:** `v1.0.0`
+- **After [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (pending merge, not yet in `dev`):** `dev` no longer deploys; a push/merge to `main` deploys to the `staging` GitHub environment; a `vX.Y.Z` tag on a `main` commit deploys to `production`. CI cannot be skipped (`force_deploy` is removed), AWS access uses OIDC when `AWS_ROLE_ARN` is set (optional; otherwise access keys), and the ALB gets HTTPS only when `infra/aws/setup-ecs-infra.sh` runs with `ACM_CERTIFICATE_ARN`. Details in [Git Workflow — After API PR #20](./git_workflow.md#after-api-pr-20-pending-merge).
