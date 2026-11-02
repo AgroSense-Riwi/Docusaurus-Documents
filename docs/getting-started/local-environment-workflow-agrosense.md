@@ -113,8 +113,8 @@ volumes using the -v flag:
 ## API Authentication and Credentials (API PR #20)
 
 > **Status:** applies to [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)
-> (branch `fix/security-and-functionality`), **pending merge — not yet in
-> `dev`**. Values below come from the API repository `.env.example` on that
+> (branch `fix/security-and-functionality`), **merged into `dev` on
+> 2026-11-02**. Values below come from the API repository `.env.example` on that
 > branch; `changeme` placeholders are for local development only.
 
 ### New and changed variables in `.env`

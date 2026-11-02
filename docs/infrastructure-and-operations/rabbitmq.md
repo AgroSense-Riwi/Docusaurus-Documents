@@ -53,7 +53,7 @@ agrosense-cafe/
 
 The following queues and exchanges make up the topology of the `/agrosense` virtual host.
 
-> **Updated by [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (pending merge, not yet in `dev`):** `definitions.json` is **not** imported when the broker starts. When definitions are configured to load at boot, RabbitMQ skips creating the default user and vhost from `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` / `RABBITMQ_DEFAULT_VHOST`, and the broker would be left without credentials. Instead, the API and the telemetry consumer declare this same topology idempotently every time they connect (see [§3.3](#33-telemetry-flow-implemented-in-the-api-api-pr-20)). In the API repository the files live in `infra/docker/rabbitmq/`, and `definitions.json` there has the `vhosts`, `exchanges`, `queues` and `bindings` shown below but no `permissions` block. It can still be imported manually:
+> **Updated by [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (merged into `dev` on 2026-11-02):** `definitions.json` is **not** imported when the broker starts. When definitions are configured to load at boot, RabbitMQ skips creating the default user and vhost from `RABBITMQ_DEFAULT_USER` / `RABBITMQ_DEFAULT_PASS` / `RABBITMQ_DEFAULT_VHOST`, and the broker would be left without credentials. Instead, the API and the telemetry consumer declare this same topology idempotently every time they connect (see [§3.3](#33-telemetry-flow-implemented-in-the-api-api-pr-20)). In the API repository the files live in `infra/docker/rabbitmq/`, and `definitions.json` there has the `vhosts`, `exchanges`, `queues` and `bindings` shown below but no `permissions` block. It can still be imported manually:
 >
 > ```bash
 > docker compose exec broker rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
@@ -178,7 +178,7 @@ vm_memory_high_watermark.relative = 0.6
 
 ### 3.3 Telemetry Flow Implemented in the API (API PR #20)
 
-> **Status:** implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **pending merge — not yet in `dev`**. Before this PR, the API published to a queue named `agrosense.telemetry` that is not part of the topology above.
+> **Status:** implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **merged into `dev` on 2026-11-02**. Before this PR, the API published to a queue named `agrosense.telemetry` that is not part of the topology above.
 
 **Connection.** The API, the consumer and the simulators connect with `AGROSENSE_RABBITMQ_URL`, which points to the `/agrosense` vhost (URL-encoded as `%2Fagrosense`), e.g. `amqp://agrosense_mq:<password>@broker:5672/%2Fagrosense`. In Docker Compose the broker creates that vhost from `RABBITMQ_DEFAULT_VHOST=/agrosense`. A broker whose data volume already exists does not create it again; in that case run `rabbitmqctl add_vhost /agrosense` and grant the user permissions on it.
 

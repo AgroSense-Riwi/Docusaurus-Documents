@@ -197,7 +197,7 @@ volumes:
 
 ## 6. `/health` and `/health/live` Endpoints in FastAPI
 
-> **Status:** the behavior below is implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **pending merge — not yet in `dev`**. The real implementation lives in the API repository at `apps/api/src/agrosense_api/api/v1/endpoints/health.py` (both routes are mounted at the root, without the `/api/v1` prefix).
+> **Status:** the behavior below is implemented in [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`), **merged into `dev` on 2026-11-02**. The real implementation lives in the API repository at `apps/api/src/agrosense_api/api/v1/endpoints/health.py` (both routes are mounted at the root, without the `/api/v1` prefix).
 
 The API exposes two probes with different purposes:
 

@@ -222,7 +222,7 @@ and RN-11, automated integration tests perform the following assertions:
 
 > **Status:** the behavior below is implemented in
 > [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch
-> `fix/security-and-functionality`), **pending merge — not yet in `dev`**.
+> `fix/security-and-functionality`), **merged into `dev` on 2026-11-02**.
 > Sections 2–5 above are the design specification; the real tables use the
 > English names of the [Dataset & Database Structure](../architecture-and-design/data_structure.md)
 > (`export_batches`, `buyer_batch_contracts`, `farms`, `forest_reserves`).

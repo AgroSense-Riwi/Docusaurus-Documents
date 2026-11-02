@@ -89,9 +89,9 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 - **Planned production release:** production deployments triggered by a Git Release Tag created from `main`.
 - **Version format:** `v1.0.0`
 
-#### After API PR #20 (pending merge)
+#### After API PR #20 (merged into `dev`)
 
-[API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`, **not yet merged into `dev`**) changes the API workflows as follows. Until it is merged and promoted to `main`, the current state above still applies.
+[API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (branch `fix/security-and-functionality`, **merged into `dev` on 2026-11-02**) changes the API workflows as follows. Until it is merged and promoted to `main`, the current state above still applies.
 
 | Event | Workflow | Result |
 | :-- | :-- | :-- |
