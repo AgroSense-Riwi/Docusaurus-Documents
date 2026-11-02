@@ -3,7 +3,7 @@ sidebar_position: 1
 title: Current Project Status
 ---
 
-# Current Project Status (as of 2026-10-31)
+# Current Project Status (as of 2026-10-31, deployment rows updated 2026-11-02)
 
 Most pages in this site describe the **target (designed) architecture** of
 AgroSense Café. This page records what is **actually implemented and
@@ -18,7 +18,7 @@ Sources: review of the AWS account (region `us-east-2`, Ohio) and of the
 | Component | Designed in | Current real state |
 | --- | --- | --- |
 | AWS region | [US-01 architecture](../deliverables/us01-technical-research-architecture-cost-estimation.md) | `us-east-2` (Ohio). |
-| Traceability API (FastAPI) | [US-01 ADR-002 / ADR-003](../deliverables/us01-technical-research-architecture-cost-estimation.md) | ECS cluster `agrosense-cluster` with one service, `agrosense-api-service`, running on Fargate behind an Application Load Balancer (HTTP only, port 80). The only registered task definition family is `agrosense-api`. The service currently **cannot start** because the database instance is stopped (see next row). |
+| Traceability API (FastAPI) | [US-01 ADR-002 / ADR-003](../deliverables/us01-technical-research-architecture-cost-estimation.md) | ECS cluster `agrosense-cluster` with one service, `agrosense-api-service`, running on Fargate behind an Application Load Balancer (HTTP only, port 80). The only registered task definition family is `agrosense-api`. Since 2026-11-02 it runs the code of `main` (task definition `agrosense-api:23`) and connects to the database as `agrosense_app`. It is kept at **0 tasks** to save credits and is started only for testing, together with the database instance (see next row). |
 | PostgreSQL + PostGIS | [US-01 ADR-001](../deliverables/us01-technical-research-architecture-cost-estimation.md) (EC2 `t4g.small` / `t3.small`) | EC2 instance `agrosense-db-server`, type **`t3.micro`**. It is **intentionally stopped** by the team to save AWS credits until the project is ready. |
 | Operational schema | [Dataset & Database Structure](../architecture-and-design/data_structure.md) (24 tables) | **13 tables** created by API Alembic migration `927ccb53d091`, plus migration `c1a8f93e2b45` (row-level security). The remaining 11 tables are planned; see the [implementation status table](../architecture-and-design/data_structure.md#implementation-status-as-of-2026-10-31). |
 | RabbitMQ + FastConsumer worker | [US-01 inventory](../deliverables/us01-technical-research-architecture-cost-estimation.md), [RabbitMQ (local)](../infrastructure-and-operations/rabbitmq.md) | **Broker deployed** (2026-11-02) as ECS Fargate service `agrosense-broker` (task definition `agrosense-broker`, data on EFS access point `/rabbitmq-data`, vhost `/agrosense`), reachable at `broker.agrosense.local:5672` through the Cloud Map private namespace `agrosense.local`. It is kept at **0 tasks** to save credits and is started only for testing. Created by API script `infra/aws/setup-broker.sh`. The FastConsumer worker runs as a second container in the API task. Cloud Map is not described elsewhere in this documentation; it was chosen as the lowest-cost way for the API to find the broker. |
@@ -28,14 +28,15 @@ Sources: review of the AWS account (region `us-east-2`, Ohio) and of the
 | Managed alternatives | [US-01 ADRs](../deliverables/us01-technical-research-architecture-cost-estimation.md) | No Amazon RDS, AWS Lambda or Amazon EMR resources in the account. |
 | Cost estimate | [AGRO-12 cost analysis](../deliverables/agro12-aws-cost-analysis-and-budget-alarms.md) | Design-time estimate; not recalculated for the components actually deployed. |
 | Seed data | [Seed validation criteria](../data-quality-and-seed-data/seed-dataset-validation-criteria-en.md), [Reproducibility strategy](../data-quality-and-seed-data/seed_data_reproducibility_strategy.md) | Run with `python -m seed`. The dev profile produces 130 farms, at least 80 harvest deliveries and 10 export batches (asserted by Database-seed `tests/test_idempotency_ct06.py`). |
-| Git flow & CI/CD | [Git Workflow](./git_workflow.md) | Feature branches → PR → `dev`; `dev` → `main` via PR. `main` is protected in API and Database-seed and has not yet been updated from `dev` in any repository. With API PR #20 merged, `dev` no longer deploys: a merge to `main` deploys to `staging` and a tag `vX.Y.Z` deploys to `production`. `main` and `dev` have no common history yet, so the first promotion is pending. |
-| Merged into `dev` (API PR #20) | See the section below | Security and functionality fixes on branch `fix/security-and-functionality` ([API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)), merged into `dev` on 2026-11-02. Not deployed yet: `main` has not been updated. |
+| Git flow & CI/CD | [Git Workflow](./git_workflow.md) | Feature branches → PR → `dev`; `dev` → `main` via PR. `main` is protected in API and Database-seed. With API PR #20 merged, `dev` no longer deploys: a merge to `main` deploys to `staging` and a tag `vX.Y.Z` deploys to `production`. In the **API** repo, the first promotion `dev` → `main` was [PR #23](https://github.com/AgroSense-Riwi/API/pull/23) (2026-11-02): because the two branches had no common history, it was merged with the `ours` strategy and `--allow-unrelated-histories`, so `main` now has the content of `dev` and both branches share history. Later promotions (PRs #25, #27, #29) are normal PRs. In **Database-seed**, `main` has not been updated from `dev` yet. No `vX.Y.Z` tag exists, so nothing has been deployed to `production`. |
+| Merged into `dev` (API PR #20) | See the section below | Security and functionality fixes on branch `fix/security-and-functionality` ([API PR #20](https://github.com/AgroSense-Riwi/API/pull/20)), merged into `dev` on 2026-11-02 and deployed to `staging` through `main` the same day. |
 | CA-09 (buyer isolation) | [CA-09 implementation](../data-and-traceability/traceability-schema-definition-rn08-rn09-rn11.md#63-ca-09-foreign-batch-returns-403-under-rls-migration-f3b8c1d4a6e2) | **Verified in AWS on 2026-11-02**: with the API connected as `agrosense_app` (secret `agrosense/prod/database-url`) and task definition `agrosense-api:23`, a foreign batch returns `403`, an unknown code `404` and an own batch `200` (`infra/aws/ca09-smoke-test.sh`). The `403` is not written to an audit log yet. After the test the API and broker were scaled to 0 and the EC2 instance was stopped. |
 
 ## Merged into `dev` (API PR #20)
 
 [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) was merged into
-`dev` on 2026-11-02. It is not deployed yet (`main` has not been updated).
+`dev` on 2026-11-02 and deployed to `staging` through `main` the same day
+(API PRs #23 to #29).
 Summary of what it changes:
 
 | Area | Change in PR #20 | Documented in |

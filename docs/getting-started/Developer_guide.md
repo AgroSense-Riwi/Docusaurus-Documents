@@ -132,7 +132,8 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 
 ### 8. Release Flow
 
-- **Current state (2026-10-31):** the API deploy workflow (`.github/workflows/deploy-ecs.yml`) is currently triggered by a push to `main` or `dev` (or manually). `main` has not yet been updated from `dev` in any repository.
+- **Before 2026-11-02:** the API deploy workflow (`.github/workflows/deploy-ecs.yml`) was triggered by a push to `main` or `dev` (or manually), and `main` had not been updated from `dev` in any repository.
+- **Current state (2026-11-02):** in the API repo, `main` was first updated from `dev` with [PR #23](https://github.com/AgroSense-Riwi/API/pull/23) and now deploys to `staging` on every merge (last deploy: PR #29, task definition `agrosense-api:23`). In Database-seed, `main` has not been updated from `dev` yet. No release tag exists yet.
 - **Planned production release:** production deployments triggered by a Git Release Tag created from `main`.
 - **Version format:** `v1.0.0`
 - **After [API PR #20](https://github.com/AgroSense-Riwi/API/pull/20) (merged into `dev` on 2026-11-02):** `dev` no longer deploys; a push/merge to `main` deploys to the `staging` GitHub environment; a `vX.Y.Z` tag on a `main` commit deploys to `production`. CI cannot be skipped (`force_deploy` is removed), AWS access uses OIDC when `AWS_ROLE_ARN` is set (optional; otherwise access keys), and the ALB gets HTTPS only when `infra/aws/setup-ecs-infra.sh` runs with `ACM_CERTIFICATE_ARN`. Details in [Git Workflow — After API PR #20](./git_workflow.md#after-api-pr-20-merged-into-dev).
