@@ -49,7 +49,13 @@ docker compose down
 ## Publish
 
 The site is published at
-<https://pbyte5.github.io/AgroSense-Documents/> using GitHub Pages. The workflow
-in `.github/workflows/deploy.yml` builds and deploys the site after changes are
-pushed to `main`; it can also be started manually from the GitHub Actions tab.
-Configure the repository's Pages source as **GitHub Actions** in its settings.
+<https://gen-lang-client-0936632479.web.app/> using Firebase Hosting (project
+`gen-lang-client-0936632479`, see `.firebaserc` and `firebase.json`). The
+workflow in `.github/workflows/deploy.yml` builds the site and deploys it to the
+`live` channel after changes are pushed to `main`; it can also be started
+manually from the GitHub Actions tab.
+
+The deploy step needs the repository secret `FIREBASE_SERVICE_ACCOUNT`: the JSON
+key of a Google Cloud service account with the **Firebase Hosting Admin** role on
+that project. Without the secret the workflow only builds the site and shows a
+warning. Never commit the key to the repository.
