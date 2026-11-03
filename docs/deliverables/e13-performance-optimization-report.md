@@ -7,7 +7,7 @@ title: Performance & Optimization Report (E-13 / Tema #3 / Tema #16)
 
 | **Deliverable** | `E-13` — Evidence-Based Performance Optimization Report (PySpark, FastAPI & Docker Multi-Stage) |
 | :--- | :--- |
-| **Aligned Requirements** | `Tema #3` (Multi-Stage Docker Builds), `Tema #16` (Spark Optimization), `RNF-02` (Batch Window $\le 3\text{ h}$), `RNF-03` (API $p_{95} \le 500\text{ ms}$) |
+| **Aligned Requirements** | `Tema #3` (Multi-Stage Docker Builds), `Tema #16` (Spark Optimization), `RNF-02` (Batch Window <= 3 h), `RNF-03` (API p95 <= 500 ms) |
 | **Implementation Modules** | `apps/api/src/agrosense_api/services/spark_optimization.py`, `pipelines/spark_jobs/gold_star_schema_pyspark.py`, `apps/api/Dockerfile` |
 
 ---
@@ -23,10 +23,10 @@ title: Performance & Optimization Report (E-13 / Tema #3 / Tema #16)
 
 | Metric | Baseline (Unoptimized JSON + SortMergeJoin, 200 partitions) | Optimized (Snappy Parquet + BroadcastHashJoin, 4 partitions) | Improvement |
 | :--- | :--- | :--- | :--- |
-| **Execution Time (1,300 farms / 15k deliveries)** | $48.4\text{ s}$ | $6.8\text{ s}$ | **$-85.9\%$ ($7.1\times$ faster)** |
-| **Shuffle Bytes Written** | $142.0\text{ MB}$ | $0.0\text{ MB}$ (BroadcastJoin) | **$-100\%$ shuffle elimination** |
-| **S3 Gold Output Size** | $18.6\text{ MB}$ (uncompressed JSON/CSV) | $2.1\text{ MB}$ (Snappy Parquet) | **$-88.7\%$ storage & Athena scan cost** |
-| **Athena Query Latency (`fact_alertas` + `dim_finca`)** | $4.9\text{ s}$ | $1.1\text{ s}$ | **$-77.5\%$** |
+| **Execution Time (1,300 farms / 15k deliveries)** | `48.4 s` | `6.8 s` | **-85.9% (7.1x faster)** |
+| **Shuffle Bytes Written** | `142.0 MB` | `0.0 MB` (BroadcastJoin) | **-100% shuffle elimination** |
+| **S3 Gold Output Size** | `18.6 MB` (uncompressed JSON/CSV) | `2.1 MB` (Snappy Parquet) | **-88.7% storage & Athena scan cost** |
+| **Athena Query Latency (`fact_alertas` + `dim_finca`)** | `4.9 s` | `1.1 s` | **-77.5%** |
 
 ---
 
@@ -40,9 +40,9 @@ title: Performance & Optimization Report (E-13 / Tema #3 / Tema #16)
 
 | Percentile / Metric | Unindexed N+1 Baseline | Optimized (Indexed + Eager Load + GiST) | SLA Target (`RNF-03`) |
 | :--- | :--- | :--- | :--- |
-| **$p_{50}$ (Median)** | $185\text{ ms}$ | $28\text{ ms}$ | — |
-| **$p_{95}$ Latency** | $640\text{ ms}$ | **$84\text{ ms}$** | **$\le 500\text{ ms}$ (PASS)** |
-| **$p_{99}$ Latency** | $910\text{ ms}$ | $142\text{ ms}$ | $\le 1000\text{ ms}$ |
+| **p50 (Median)** | `185 ms` | `28 ms` | — |
+| **p95 Latency** | `640 ms` | **`84 ms`** | **<= 500 ms (PASS)** |
+| **p99 Latency** | `910 ms` | `142 ms` | <= 1000 ms |
 
 ---
 
@@ -55,5 +55,5 @@ title: Performance & Optimization Report (E-13 / Tema #3 / Tema #16)
 
 | Image Variant | Base Image | Layers | Final Image Size | Cold Pull Time (ECS Fargate) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Single-Stage Baseline** | `python:3.12` (full Debian + build toolchain) | 14 | $1,140\text{ MB}$ | $42\text{ s}$ |
-| **Multi-Stage Production (`apps/api/Dockerfile`)** | `python:3.12-slim` (runtime only, non-root) | 8 | **$268\text{ MB}$** | **$9\text{ s}$ ($-76.5\%$ size)** |
+| **Single-Stage Baseline** | `python:3.12` (full Debian + build toolchain) | 14 | `1,140 MB` | `42 s` |
+| **Multi-Stage Production (`apps/api/Dockerfile`)** | `python:3.12-slim` (runtime only, non-root) | 8 | **`268 MB`** | **`9 s` (-76.5% size)** |
