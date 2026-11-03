@@ -147,6 +147,45 @@ EC2), and S3 Buckets (Data Lake & Database Backups).*
 | Consequences & Benefits | Single execution model across environments. Batch PySpark jobs scale to zero when inactive, saving ~65% in compute costs.                                        |
 | Validation Criteria     | Single-command local startup succeeds in under 30 minutes (CT-01); zero secrets in container images (CT-02).                                                     |
 
+### ADR-004: Asynchronous Telemetry Broker — RabbitMQ Topic Exchange + DLX on ECS Fargate & EFS
+
+| Context & Need          | Buffer 3-to-7-day cellular disconnection bursts from 900 IoT sensors across 300 pilot farms without losing a single reading (RNF-01, CA-01, RN-01) while isolating corrupted payloads. |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decision Adopted        | RabbitMQ 3.13 with durable topic exchange (`agrosense.ingest.exchange`), 7-day TTL queues (`telemetry.raw.queue`), Dead-Letter Exchange (`agrosense.dlx.exchange` -> `dead.letter.queue`), manual consumer ACK after S3 Bronze persistence, and EFS (`fs-06d46462d0c634895`) storage via AWS Cloud Map (`broker.agrosense.local:5672`). |
+| Alternatives Rejected   | 1\) Amazon Managed MQ: High fixed monthly base cost (~$58/mo minimum). 2) Apache Kafka / MSK: Over-provisioned cluster footprint (> $180/mo) for 900 sensors emitting every 10 minutes. 3) Direct synchronous DB inserts: Fails under burst reconnection and lacks native topic + DLX routing. |
+| Consequences & Benefits | Zero message loss under 7-day offline bursts; deterministic per-sensor chronological sorting (`FastTelemetryConsumerWorker`) and automatic poison-message quarantine (`dead.letter.queue`). |
+| Validation Criteria     | Manual ACK only after S3 Bronze persistence (`telemetry_consumer.py`); CloudWatch alarm `agrosense-dlq-messages-alarm` fires when `DLQMessageCount >= 1` (`CT-09`). |
+
+### ADR-005: Analytical Lakehouse & BI Serving Layer — S3 Medallion Snappy Parquet + AWS Glue & Athena
+
+| Context & Need          | Serve 6 executive Power BI business questions combining operational Postgres data, IoT telemetry, and satellite weather without overloading the transactional database or exceeding the cooperative's budget (RNF-04, CT-07, CT-10). |
+| :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decision Adopted        | 3-layer S3 Medallion Data Lake (`s3://datalakeagrosense/raw/`, `silver/`, `gold/`) written as Snappy-compressed Parquet by PySpark (`gold_star_schema_pyspark.py`), cataloged in AWS Glue (`agrosense_datalake`) and queried serverless via Amazon Athena ($5.00/TB scanned). |
+| Alternatives Rejected   | 1\) Amazon Redshift: Minimum cluster cost (~$180/mo) violates RNF-04 for < 50 GB analytical volume. 2) Direct Power BI queries against transactional PostGIS DB: Degrades p95 API latency (RNF-03) during analytical scans. |
+| Consequences & Benefits | Near-zero idle analytical storage cost (~$1.69/mo) with 3-tier S3 Lifecycle transitions (`STANDARD_IA` -> `GLACIER`) and sub-2s Athena queries over `dim_finca`, `dim_tiempo`, `fact_entregas`, and `fact_alertas`. |
+| Validation Criteria     | All 4 Gold tables populated in `s3://datalakeagrosense/gold/` and queryable in `agrosense_datalake` via Athena (`CT-07`, `CT-10`). |
+
+## 2.1 Technical Trade-off Analysis: AWS ECS Fargate vs. Amazon EKS
+
+| Evaluation Dimension | AWS ECS Fargate (Adopted) | Amazon EKS (Rejected for Cooperative Pilot) |
+| :--- | :--- | :--- |
+| **Fixed Control Plane Cost** | **$0.00 USD/month** (pay only for vCPU/GB-seconds consumed) | **$73.00 USD/month** ($0.10/hr per cluster before any worker nodes) |
+| **Scale-to-Zero FinOps (`RNF-04`)** | Native `desiredCount=0` on `agrosense-api-service`, `agrosense-broker`, and `agrosense-airflow` ($0.00/h compute when paused) | Requires Karpenter/Cluster Autoscaler plus persistent system daemonsets (`coredns`, `kube-proxy`, `aws-node`) |
+| **Operational Overhead** | Zero control-plane upgrades; native integration with ALB, AWS Secrets Manager ARNs, EFS access points, and CloudWatch Logs | High operational complexity (Kubernetes version upgrades every 14 months, CNI/IAM OIDC controller maintenance, Helm chart lifecycle) |
+| **Batch PySpark Execution** | On-demand `ecs:RunTask` (`setup-airflow.sh`) starts a 1 vCPU / 4 GB Fargate task for `dag_gold_star_schema` and terminates immediately | Requires Spark-on-K8s operator and warm node groups |
+| **Architectural Fit for AgroSense** | **Optimal:** Matches the 3-service topology (`api` + co-located `telemetry-consumer`, `broker`, `airflow`) within the $35–$260/mo cooperative budget | **Disproportionate:** The $73/mo EKS control plane alone exceeds the entire Minimum Viable Cost budget ($35–$48/mo) |
+
+## 2.2 Architecture Design Questions Resolution (Section 10.2)
+
+1. **How does the architecture guarantee zero data loss when a rural farm loses 3G/4G connectivity for 3 to 7 days (`RNF-01`, `RN-01`)?**
+   Edge gateways buffer readings locally and transmit a multi-day JSON batch upon reconnection to `POST /api/v1/telemetry`, which publishes with `publisher_confirms=True` and `PERSISTENT` delivery mode to RabbitMQ (`telemetry.raw.queue`, `x-message-ttl = 7 days` on EFS). `FastTelemetryConsumerWorker` deduplicates via `IdempotencyDeduplicator`, sorts strictly by `(sensor_id, observed_at)`, persists to `s3://datalakeagrosense/raw/iot_telemetry/`, and only then issues the manual `ACK`.
+2. **How are corrupt or out-of-range sensor readings isolated without blocking valid farm telemetry (`RN-02`, `CA-01`)?**
+   Whole malformed payloads are rejected (`requeue=False`) and routed by the broker to `agrosense.dlx.exchange` $ightarrow$ `dead.letter.queue`. Partial bursts with invalid items publish the defective items explicitly to `dlq.telemetry` before acknowledging the valid readings, while firing `agrosense-dlq-messages-alarm` (`CT-09`).
+3. **How is strict multi-tenant buyer isolation enforced even if an application query bug occurs (`RN-11`, `CA-09`)?**
+   Defense-in-depth at the PostgreSQL engine layer: `export_batches` and `buyer_batch_contracts` enforce `FORCE ROW LEVEL SECURITY` with a deny-by-default policy (`b7d4e2f9a1c3`), the API connects as non-owner `agrosense_app`, sets `SET LOCAL app.current_buyer_id` per transaction, distinguishes `403 Forbidden` vs `404 Not Found` via `SECURITY DEFINER` function `export_batch_exists(code)` (`f3b8c1d4a6e2`), and logs every access in append-only table `buyer_api_audit_logs` (`a9c4e6b2d8f1`).
+4. **How does the cooperative minimize AWS cloud expenditure during non-harvest or low-activity windows (`RNF-04`, `CT-03`)?**
+   By combining S3 Gateway VPC Endpoints ($0 data transfer to S3), EC2 `t3.micro` for PostGIS, ECS Fargate scale-to-zero (`desiredCount=0`), and automated FinOps scripts (`./infra/aws/nat-toggle.sh down` and `./infra/aws/teardown.sh pause`) that eliminate NAT Gateway + Elastic IP hourly charges when idle.
+
 # 3. AC-02: Services Stack Inventory & Technical Justification
 
 **Comprehensive Stack Inventory:** The complete architecture

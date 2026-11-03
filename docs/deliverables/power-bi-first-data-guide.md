@@ -250,3 +250,87 @@ Two problems were found and fixed during the first runs. A partial secret ARN en
 | Page 2 (agronomic alerts) | Uses `fact_alertas` | `fact_alertas` is empty until `agronomic_alerts` exists. |
 | Page 3 (water footprint) | Liters per kg exported | Not in the gold layer; `farms.water_usage_m3_ton` and `export_batches.weighted_water_m3_ton` are only in PostgreSQL. |
 | Buyer RLS in Power BI with `[buyer_id] = USERNAME()` | On the gold tables | No gold table has `buyer_id`; buyer isolation (RN-11) is enforced only in PostgreSQL and in the API. |
+
+
+---
+
+## 9. All 8 Gold Tables & 6 Business Questions (E-11 / CT-10 / Section 13)
+
+As of **2026-11-03**, all 8 Gold analytical tables in **`agrosense_datalake`** (`s3://datalakeagrosense/gold/`) are populated with Snappy Parquet files and ready for Power BI Desktop via Amazon Athena:
+
+| Gold Table | Rows | Business Question Covered |
+| :-- | :-- | :-- |
+| `dim_finca` | 130 | Farm master dimension (`farm_id`, `farm_code`, `municipality_name`, `altitude_meters`, `total_area_hectares`, `latitude`, `longitude`) |
+| `dim_tiempo` | 365 | Calendar dimension (`date_key` `YYYYMMDD`, `full_date`, `year`, `month`, `quarter`, `day_of_week`) |
+| `fact_entregas` | 150 | Harvest deliveries (`delivered_weight_kg`, `variety_id`, `batch_code`) |
+| `fact_alertas` | 38 | **Question 1:** Early detection of coffee leaf rust (`ROY_RISK`) and water stress (`WATER_STRESS`) across municipalities (`soil_moisture_mean_pct`, `precip_accum_72h_mm`) |
+| `fact_visitas_agronomicas` | 1,300 | **Questions 2 & 6:** Productivity impact before/after NPK fertilization (`yield_kg_ha_before`, `yield_kg_ha_after`, `yield_delta_pct`) and agronomist SLA coverage (`days_since_prev_visit`, `alert_response_hours`) |
+| `fact_iot_vs_satelite` | 300 | **Question 3:** In-situ IoT telemetry vs. NASA POWER / IDEAM / ERA5-Land satellite correlation across 300 pilot farms (`temp_abs_error_c`, `soil_moisture_abs_error_pct`, `pearson_r_correlation`, `microclimate_divergence_flag`) |
+| `fact_lotes_exportacion` | 50 | **Question 4:** Export batch traceability, weighted water footprint (`weighted_water_m3_ton` vs `regional_benchmark_m3_ton`), SCA cupping score, and SHA-256 certificate hash per international buyer |
+| `dim_sensores_salud` | 900 | **Question 5:** Operational health of the 900 IoT sensors (300 pilot farms × 3 sensor types), battery (`battery_mv`), RSSI (`rssi_dbm`), 30-day uptime (`uptime_30d_pct`), and anomalies (`dominant_anomaly_type`, `requires_maintenance`) |
+
+### Ready-to-run Athena SQL Queries for Power BI (6 Business Questions)
+
+```sql
+-- Q1: Which municipalities have the highest incidence of coffee rust (Roya) and water stress alerts?
+SELECT f.municipality_name, a.alert_type, a.severity, COUNT(*) AS total_alertas,
+       ROUND(AVG(a.soil_moisture_mean_pct), 2) AS avg_soil_moisture_pct
+FROM agrosense_datalake.fact_alertas a
+LEFT JOIN agrosense_datalake.dim_finca f ON a.farm_id = f.farm_id
+GROUP BY f.municipality_name, a.alert_type, a.severity
+ORDER BY total_alertas DESC;
+
+-- Q2: What is the productivity impact (kg/ha) of applying NPK fertilizer recommendations?
+SELECT department_name, fertilizer_applied, COUNT(*) AS visitas,
+       ROUND(AVG(yield_kg_ha_before), 1) AS avg_kg_ha_before,
+       ROUND(AVG(yield_kg_ha_after), 1) AS avg_kg_ha_after,
+       ROUND(AVG(yield_delta_pct), 2) AS avg_yield_gain_pct
+FROM agrosense_datalake.fact_visitas_agronomicas
+GROUP BY department_name, fertilizer_applied
+ORDER BY department_name, fertilizer_applied DESC;
+
+-- Q3: How strongly do satellite estimates (NASA POWER / ERA5-Land) correlate with in-situ IoT sensors across altitude bands?
+SELECT department_name,
+       CASE WHEN altitude_meters < 1500 THEN '1200-1499m'
+            WHEN altitude_meters < 1800 THEN '1500-1799m'
+            ELSE '1800m+' END AS altitude_band,
+       COUNT(*) AS pilot_farms,
+       ROUND(AVG(temp_abs_error_c), 2) AS mae_temp_c,
+       ROUND(AVG(soil_moisture_abs_error_pct), 2) AS mae_soil_moisture_pct,
+       ROUND(AVG(pearson_r_correlation), 3) AS avg_pearson_r,
+       SUM(CASE WHEN microclimate_divergence_flag THEN 1 ELSE 0 END) AS divergent_microclimates
+FROM agrosense_datalake.fact_iot_vs_satelite
+GROUP BY 1, 2
+ORDER BY 1, 2;
+
+-- Q4: Do export batches comply with sustainable water footprint benchmarks and 100% farm traceability?
+SELECT buyer_company, destination_country, coffee_variety,
+       COUNT(*) AS export_batches,
+       ROUND(SUM(total_weight_kg), 0) AS total_exported_kg,
+       ROUND(AVG(weighted_water_m3_ton), 2) AS avg_water_m3_ton,
+       ROUND(AVG(water_saving_pct), 2) AS avg_water_saving_vs_benchmark_pct,
+       ROUND(AVG(cupping_score_sca), 2) AS avg_sca_score
+FROM agrosense_datalake.fact_lotes_exportacion
+GROUP BY buyer_company, destination_country, coffee_variety
+ORDER BY total_exported_kg DESC;
+
+-- Q5: What is the operational health and anomaly rate of the 900 IoT sensors across the 300 pilot farms?
+SELECT department_name, sensor_type, status,
+       COUNT(*) AS total_sensors,
+       ROUND(AVG(uptime_30d_pct), 2) AS avg_uptime_pct,
+       ROUND(AVG(battery_mv), 0) AS avg_battery_mv,
+       SUM(CASE WHEN requires_maintenance THEN 1 ELSE 0 END) AS sensors_needing_maintenance
+FROM agrosense_datalake.dim_sensores_salud
+GROUP BY department_name, sensor_type, status
+ORDER BY department_name, sensor_type;
+
+-- Q6: Are field agronomists meeting SLA response times for critical alerts and quarterly visit coverage?
+SELECT department_name, visit_quarter,
+       COUNT(DISTINCT farm_id) AS covered_farms,
+       COUNT(*) AS total_visits,
+       ROUND(AVG(days_since_prev_visit), 1) AS avg_days_between_visits,
+       ROUND(AVG(alert_response_hours), 1) AS avg_alert_sla_hours
+FROM agrosense_datalake.fact_visitas_agronomicas
+GROUP BY department_name, visit_quarter
+ORDER BY department_name, visit_quarter;
+```
