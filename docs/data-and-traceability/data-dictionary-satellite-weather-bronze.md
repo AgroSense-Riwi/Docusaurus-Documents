@@ -39,7 +39,7 @@ Tanto NASA POWER como Open-Meteo siguen el mismo contrato raíz para estandariza
 
 ## 2. NASA POWER API (Fuente F2 - Clima Histórico Diario)
 
-* **Ruta S3:** `weather_nasa_power/dt=YYYY-MM-DD/nasa_power_YYYY-MM-DD.json`
+* **Ruta S3:** `{S3_BRONZE_PREFIX}weather_nasa_power/dt=YYYY-MM-DD/nasa_power_YYYY-MM-DD.json`. En AWS, `S3_BRONZE_PREFIX=raw/`: `s3://datalakeagrosense/raw/weather_nasa_power/dt=YYYY-MM-DD/nasa_power_YYYY-MM-DD.json`. En local va vacío.
 * **Formato del payload:** GeoJSON estándar (`type: Feature`). Los valores se encuentran en `records[].data.properties.parameter.<VARIABLE>["YYYYMMDD"]`.
 
 | Parámetro | Nombre Completo | Unidad | Descripción y Uso Agronómico |
@@ -54,7 +54,7 @@ Tanto NASA POWER como Open-Meteo siguen el mismo contrato raíz para estandariza
 
 ## 3. Open-Meteo API (Fuente F3 - Pronóstico a 7 Días)
 
-* **Ruta S3:** `weather_open_meteo/dt=YYYY-MM-DD/open_meteo_YYYY-MM-DD.json`
+* **Ruta S3:** `{S3_BRONZE_PREFIX}weather_open_meteo/dt=YYYY-MM-DD/open_meteo_YYYY-MM-DD.json`. En AWS, `S3_BRONZE_PREFIX=raw/`: `s3://datalakeagrosense/raw/weather_open_meteo/dt=YYYY-MM-DD/open_meteo_YYYY-MM-DD.json`. En local va vacío.
 * **Formato del payload:** JSON con arrays temporales para series diarias y horarias a 7 días.
 
 ### 3.1 Métricas Diarias (`records[].data.daily`)
