@@ -1,0 +1,27 @@
+﻿Resumen de la estimación
+Costo inicial,Costo mensual,Total 12 months cost,Divisa
+0,265.45,3185.40,USD
+,,* Incluye el costo inicial
+
+
+Estimación detallada
+Jerarquía de grupos,Región,Descripción,Servicio,Inicial,Mensual,First 12 months total,Divisa,Estado,Resumen de configuración
+My Estimate,Este de EE. UU. (Norte de Virginia),AgroSense-A-Prod,Public IPv4 Address,0,10.95,131.40,USD,,Cantidad de direcciones IPv4 públicas en uso (3)
+My Estimate,Este de EE. UU. (Norte de Virginia),AgroSense-A-Prod,Network Address Translation (NAT) Gateway,0,33.75,405.00,USD,,"Cantidad de gateways NAT regionales (1), Cantidad de zonas de disponibilidad en las que las gateways NAT regionales están activas (1), Cantidad de gateways NAT (0)"
+My Estimate,Este de EE. UU. (Norte de Virginia),,Application Load Balancer,0,16.66,199.92,USD,,Número de balanceadores de carga de aplicaciones (1)
+My Estimate,Este de EE. UU. (Norte de Virginia),FastAPI,AWS Fargate,0,36.04,432.48,USD,,"Sistema operativo (Linux), Arquitectura de la CPU (x86), Duración promedio (24 horas), Número de tareas o pods (2 por día), Cantidad de almacenamiento efímero asignado a Amazon ECS (20 GB), Cantidad de memoria asignada (1 GB)"
+My Estimate,Este de EE. UU. (Norte de Virginia),AirFlow,AWS Fargate,0,108.12,1297.44,USD,,"Sistema operativo (Linux), Arquitectura de la CPU (x86), Duración promedio (24 horas), Número de tareas o pods (3 por día), Cantidad de almacenamiento efímero asignado a Amazon ECS (20 GB), Cantidad de memoria asignada (2 GB)"
+My Estimate,Este de EE. UU. (Norte de Virginia),Spark,AWS Fargate,0,7.09,85.08,USD,,"Sistema operativo (Linux), Arquitectura de la CPU (x86), Duración promedio (1 horas), Número de tareas o pods (1 por día), Cantidad de almacenamiento efímero asignado a Amazon ECS (20 GB), Cantidad de memoria asignada (16 GB)"
+My Estimate,Este de EE. UU. (Norte de Virginia),RabbitMQ,Amazon EC2 ,0,16.784,201.41,USD,,"Tenencia (Instancias compartidas), Sistema operativo (Linux), Carga de trabajo (Consistent, Cantidad de instancias: 1), Instancia EC2 por adelantado (t3.small), Pricing strategy (On-Demand Utilization: 100 %Utilized/Month), Habilitar la monitorización (desactivado), EBS Cantidad de almacenamiento (20 GB), DT Entrada: Not selected (0 TB al mes), DT Salida: Not selected (0 TB al mes), DT Intra-región: (0 TB al mes)"
+My Estimate,Este de EE. UU. (Norte de Virginia),,AWS Lambda,0,0.6,7.20,USD,,"Arquitectura (x86), Arquitectura (x86), Modo de invocación (En búfer), Cantidad de almacenamiento efímero asignado (512 MB), Cantidad de solicitudes (4000000 por mes)"
+My Estimate,Este de EE. UU. (Norte de Virginia),,Amazon RDS for PostgreSQL,0,26.81,321.72,USD,,"Cantidad de almacenamiento (30 GB), Volumen de almacenamiento (SSD de uso general (gp3)), Nodos (1), Tipo de instancia (db.t4g.small), Utilización (solo bajo demanda) (730 Hours/Month), Opción de implementación (Single-AZ), Modelo de precios (OnDemand), Almacenamiento de copias de seguridad adicional (0 GB)"
+My Estimate,Este de EE. UU. (Norte de Virginia),Data Lake,S3 Standard,0,1.69,20.28,USD,,"Almacenamiento de S3 Estándar (50 GB por mes), Solicitudes PUT, COPY, POST y LIST a S3 Standard (100000), Solicitudes GET, SELECT y todas las demás desde S3 Estándar (100000)"
+My Estimate,Este de EE. UU. (Norte de Virginia),Backups,S3 Standard,0,0.69,8.28,USD,,Almacenamiento de S3 Estándar (30 GB por mes)
+My Estimate,Este de EE. UU. (Norte de Virginia),,Amazon Elastic Container Registry,0,0.3,3.60,USD,,Cantidad de datos almacenados (3 GB por mes)
+My Estimate,Este de EE. UU. (Norte de Virginia),CloudWatch,Amazon CloudWatch,0,3.5225,42.27,USD,,"Número de eventos de OTEL móvil y spans, o spans por visita (70), Frecuencia de muestreo móvil (1), Registros estándares: datos incorporados (5 GB), Cantidad de métricas de las alarmas de resolución estándar (10)"
+My Estimate,Este de EE. UU. (Norte de Virginia),Secrets Manager,AWS Secrets Manager,0,2.4499999999999997,29.40,USD,,"Número de secretos (6), Duración media de cada secreto (30 días), Número de llamadas a la API (10000 por mes)"
+
+
+
+Reconocimiento
+"* La Calculadora de precios de AWS proporciona únicamente una estimación de sus tarifas de AWS y no incluye los impuestos que puedan aplicarse. El valor real de sus tarifas depende de una serie de factores, entre los que se incluye su uso real de AWS."
