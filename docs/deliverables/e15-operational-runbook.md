@@ -14,8 +14,8 @@ title: Operational Runbook & FinOps Teardown (E-15 / CT-03 / CT-09)
 
 ## 1. Recovery Objectives & Architecture Overview
 
-- **RTO (Recovery Time Objective):** $< 60\text{ minutes}$ for `agrosense-api-service`, `agrosense-broker`, and EC2 PostGIS (`i-0ee2594ccbe4f06c3`).
-- **RPO (Recovery Point Objective):** $< 15\text{ minutes}$ of telemetry data loss via durable RabbitMQ queues on Amazon EFS (`fs-06d46462d0c634895`) and S3 Bronze (`s3://datalakeagrosense/raw/iot_telemetry/`).
+- **RTO (Recovery Time Objective):** `< 60 minutes` for `agrosense-api-service`, `agrosense-broker`, and EC2 PostGIS (`i-0ee2594ccbe4f06c3`).
+- **RPO (Recovery Point Objective):** `< 15 minutes` of telemetry data loss via durable RabbitMQ queues on Amazon EFS (`fs-06d46462d0c634895`) and S3 Bronze (`s3://datalakeagrosense/raw/iot_telemetry/`).
 
 ---
 
@@ -95,6 +95,6 @@ During the live demonstration, execute:
    pg_restore -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --no-owner /tmp/agrosense.dump
    ```
 2. **S3 Medallion Lifecycle Rules (`datalakeagrosense`):**
-   - `raw/`: `STANDARD_IA` (30d) $\rightarrow$ `GLACIER` (90d) $\rightarrow$ Expiration (365d).
-   - `silver/`: `STANDARD_IA` (60d) $\rightarrow$ `GLACIER` (180d) $\rightarrow$ Expiration (730d).
+   - `raw/`: `STANDARD_IA` (30d) -> `GLACIER` (90d) -> Expiration (365d).
+   - `silver/`: `STANDARD_IA` (60d) -> `GLACIER` (180d) -> Expiration (730d).
    - `gold/`: `STANDARD_IA` (90d).
