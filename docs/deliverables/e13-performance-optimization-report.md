@@ -7,7 +7,7 @@ title: Performance & Optimization Report (E-13 / Tema #3 / Tema #16)
 
 | **Deliverable** | `E-13` — Evidence-Based Performance Optimization Report (PySpark, FastAPI & Docker Multi-Stage) |
 | :--- | :--- |
-| **Aligned Requirements** | `Tema #3` (Multi-Stage Docker Builds), `Tema #16` (Spark Optimization), `RNF-02` (Batch Window <= 3 h), `RNF-03` (API p95 <= 500 ms) |
+| **Aligned Requirements** | `Tema #3` (Multi-Stage Docker Builds), `Tema #16` (Spark Optimization), `RNF-02` (Batch Window ? 3 h), `RNF-03` (API p95 ? 500 ms) |
 | **Implementation Modules** | `apps/api/src/agrosense_api/services/spark_optimization.py`, `pipelines/spark_jobs/gold_star_schema_pyspark.py`, `apps/api/Dockerfile` |
 
 ---
@@ -41,8 +41,8 @@ title: Performance & Optimization Report (E-13 / Tema #3 / Tema #16)
 | Percentile / Metric | Unindexed N+1 Baseline | Optimized (Indexed + Eager Load + GiST) | SLA Target (`RNF-03`) |
 | :--- | :--- | :--- | :--- |
 | **p50 (Median)** | `185 ms` | `28 ms` | — |
-| **p95 Latency** | `640 ms` | **`84 ms`** | **<= 500 ms (PASS)** |
-| **p99 Latency** | `910 ms` | `142 ms` | <= 1000 ms |
+| **p95 Latency** | `640 ms` | **`84 ms`** | **? 500 ms (PASS)** |
+| **p99 Latency** | `910 ms` | `142 ms` | ? 1000 ms |
 
 ---
 
