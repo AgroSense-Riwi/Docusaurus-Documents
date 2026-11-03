@@ -5,7 +5,7 @@ sidebar_label: Power BI first data
 # Power BI: how to get the first data for the dashboard
 
 **Scope:** `SCRUM-46` (`SCRUM-186`, `SCRUM-200`, `SCRUM-201`) and the gold layer of `SCRUM-184` / `SCRUM-185`.
-**Status (2026-11-02):** the gold pipeline is implemented in the API repository ([PR #32](https://github.com/AgroSense-Riwi/API/pull/32)). See [Section 7](#7-verification) for what was verified in AWS.
+**Status (2026-11-02):** the gold pipeline is implemented in the API repository ([PR #32](https://github.com/AgroSense-Riwi/API/pull/32), fixes #34, #36 and #38). The first run in AWS succeeded and the gold tables have data; see [Section 7](#7-verification).
 
 This guide describes the path the data follows from the operational PostgreSQL database to a Power BI report, and the steps to load the first rows. It complements `docs/analytics/POWER_BI_ATHENA_DASHBOARDS.md` in the API repository; the differences with that document are listed in [Section 8](#8-differences-from-power_bi_athena_dashboardsmd).
 
@@ -230,7 +230,12 @@ In Power BI: **Get Data** → **PostgreSQL database**. Use server `localhost:154
 | :-- | :-- |
 | CI of API PR #32: SparkSession tests (schema equal to the Athena DDL, `dim_tiempo` with ISO weekdays, Snappy Parquet, S3 prefix replacement) and extraction queries against the migrated database | Passed (203 passed) |
 | Athena tables `dim_finca`, `dim_tiempo`, `fact_entregas`, `fact_alertas` created in `agrosense_datalake` on 2026-11-02 | Done |
-| First run of `dag_gold_star_schema` in AWS | Pending: requires `./infra/aws/setup-airflow.sh` (creates secrets) |
+| `./infra/aws/setup-airflow.sh` (secrets, task definition `agrosense-airflow:3`, service at 0) | Done on 2026-11-02 |
+| First run, `RUN_GOLD_DAG=1` (Fargate task `8722b82a81d74f8ab7785316d0f27008`) | `exitCode=0`; both tasks `success`. Log: `Extracted 130 farms and 150 deliveries`, then `{'dim_finca': 130, 'dim_tiempo': 365, 'fact_entregas': 150, 'fact_alertas': 0}`. About 45 s from extraction to upload. |
+| Files in `s3://datalakeagrosense/gold/` | One Snappy Parquet file per table: `dim_finca` 11,745 bytes, `dim_tiempo` 5,986, `fact_entregas` 15,450, `fact_alertas` 996 (schema only) |
+| Athena query of Section 4.3 plus checks | `dim_finca` 130, `dim_tiempo` 365 (year 2026), `fact_entregas` 150, `fact_alertas` 0; 133,501 kg delivered; 130 farms with deliveries; 20 deliveries linked to 10 batches; 0 deliveries without a `dim_tiempo` row |
+
+Two problems were found and fixed during the first runs. A partial secret ARN ending in `-secret` was read as the random suffix (`ResourceNotFoundException`, API PR #36). The secret `agrosense/prod/s3-bucket` does not contain `datalakeagrosense` (`NoSuchBucket`); `S3_BUCKET_GOLD` is now a plain environment variable (API PR #38).
 
 ---
 
